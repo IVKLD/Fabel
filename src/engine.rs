@@ -1,7 +1,5 @@
 use crate::types::{Checker, Finding, Severity, Status};
-use colored::*;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 #[derive(Default)]
@@ -16,11 +14,7 @@ pub struct AuditReport {
     pub warned: usize,
     pub failed: usize,
     pub skipped: usize,
-}
-
-pub enum AuditProgressEvent {
-    Started { domain: &'static str },
-    Completed { domain: &'static str, count: usize },
+    pub duration: std::time::Duration,
 }
 
 #[macro_export]
@@ -44,52 +38,13 @@ impl AuditEngine {
     }
 
     pub async fn execute(&self) -> AuditReport {
-        let (tx, mut rx) = mpsc::unbounded_channel::<AuditProgressEvent>();
+        let start = std::time::Instant::now();
         let mut join_set = JoinSet::new();
-
-        println!(
-            "{}",
-            "── Active Audit Progress ───────────────────────────────────────────────────────"
-                .dimmed()
-        );
 
         for checker in &self.checkers {
             let ch = Arc::clone(checker);
-            let tx_ch = tx.clone();
-            join_set.spawn(async move {
-                let domain = ch.domain();
-                let _ = tx_ch.send(AuditProgressEvent::Started { domain });
-                let findings = ch.run().await;
-                let _ = tx_ch.send(AuditProgressEvent::Completed {
-                    domain,
-                    count: findings.len(),
-                });
-                findings
-            });
+            join_set.spawn(async move { ch.run().await });
         }
-        drop(tx);
-
-        let progress_task = tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                match event {
-                    AuditProgressEvent::Started { domain } => {
-                        println!(
-                            "  {} Scanning domain: {}",
-                            "⚡".yellow().bold(),
-                            domain.white().bold()
-                        );
-                    }
-                    AuditProgressEvent::Completed { domain, count } => {
-                        println!(
-                            "  {} Finished domain: {} ({} probes evaluated)",
-                            "✔".green().bold(),
-                            domain.green(),
-                            count.to_string().cyan().bold()
-                        );
-                    }
-                }
-            }
-        });
 
         let mut findings = Vec::new();
         while let Some(res) = join_set.join_next().await {
@@ -97,13 +52,7 @@ impl AuditEngine {
                 findings.append(&mut check_findings);
             }
         }
-
-        let _ = progress_task.await;
-        println!(
-            "{}\n",
-            "────────────────────────────────────────────────────────────────────────────────"
-                .dimmed()
-        );
+        let duration = start.elapsed();
 
         let mut passed = 0;
         let mut warned = 0;
@@ -155,6 +104,7 @@ impl AuditEngine {
             warned,
             failed,
             skipped,
+            duration,
         }
     }
 }
