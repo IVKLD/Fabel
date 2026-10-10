@@ -28,7 +28,7 @@ struct Args {
     #[arg(short, long)]
     failures_only: bool,
 
-    /// Show all evaluated checks including passing ones (by default only detected issues are displayed in detail)
+    /// Show all evaluated checks and all details (table, pass/skip/warn/fail, docs links, items, and fixes)
     #[arg(short, long)]
     all: bool,
 
@@ -238,15 +238,21 @@ async fn main() {
             );
         } else {
             println!();
-            println!(
-                "  {}",
+            let header_title = if args.all {
+                format!(
+                    "━━━ Complete Security Audit Details ({} checks, {} issues detected) ━━━━━━━━━━",
+                    report.findings.len(),
+                    total_issues
+                )
+            } else {
                 format!(
                     "━━━ Actionable Security Findings ({} issues detected) ━━━━━━━━━━━━━━━━━━━━",
                     total_issues
                 )
-                .yellow()
-                .bold()
-            );
+            };
+            println!("  {}", header_title.yellow().bold());
+
+            let show_all_info = args.all || args.verbose;
 
             for (domain, findings) in domains_with_findings {
                 let relevant: Vec<_> = findings
@@ -264,22 +270,51 @@ async fn main() {
                     match &f.status {
                         Status::Pass => {
                             if args.all {
+                                println!();
                                 println!(
                                     "    {}  {:<32} {}",
-                                    "✔ PASS".green(),
+                                    "✔ PASS".green().bold(),
                                     f.check_id.white(),
                                     f.title.dimmed()
                                 );
+                                println!(
+                                    "       {:<7} {}",
+                                    "Details:".dimmed(),
+                                    f.description.green()
+                                );
+                                if !f.items.is_empty() {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Items:".dimmed(),
+                                        f.items.join(", ").cyan()
+                                    );
+                                }
+                                if let Some(url) = f.doc_url {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
                             }
                         }
                         Status::Skipped { reason } => {
-                            if args.verbose {
+                            if show_all_info {
+                                println!();
                                 println!(
                                     "    {}  {:<32} {}",
                                     "– SKIP".dimmed(),
                                     f.check_id.dimmed(),
-                                    format!("({})", reason).dimmed()
+                                    f.title.dimmed()
                                 );
+                                println!("       {:<7} {}", "Reason:".dimmed(), reason.dimmed());
+                                if let Some(url) = f.doc_url {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
                             }
                         }
                         Status::Warn => {
@@ -291,12 +326,22 @@ async fn main() {
                                 Severity::Info => "[INFO]".dimmed(),
                             };
                             println!();
-                            println!(
-                                "    {} {} {}",
-                                "⚠ WARN".on_yellow().black().bold(),
-                                sev,
-                                f.check_id.bold().yellow()
-                            );
+                            if show_all_info {
+                                println!(
+                                    "    {} {} {:<32} {}",
+                                    "⚠ WARN".on_yellow().black().bold(),
+                                    sev,
+                                    f.check_id.bold().yellow(),
+                                    f.title.dimmed()
+                                );
+                            } else {
+                                println!(
+                                    "    {} {} {}",
+                                    "⚠ WARN".on_yellow().black().bold(),
+                                    sev,
+                                    f.check_id.bold().yellow()
+                                );
+                            }
                             println!("       {:<7} {}", "Issue:".yellow(), f.description);
                             if let Some(fix) = &f.nixos_fix {
                                 let formatted_fix = fix.trim().replace('\n', "\n               ");
@@ -306,7 +351,7 @@ async fn main() {
                                     formatted_fix.cyan()
                                 );
                             }
-                            if args.verbose {
+                            if show_all_info {
                                 if !f.items.is_empty() {
                                     println!(
                                         "       {:<7} {}",
@@ -332,12 +377,22 @@ async fn main() {
                                 Severity::Info => "[INFO]".dimmed(),
                             };
                             println!();
-                            println!(
-                                "    {} {} {}",
-                                "✖ FAIL".on_red().white().bold(),
-                                sev,
-                                f.check_id.bold().red()
-                            );
+                            if show_all_info {
+                                println!(
+                                    "    {} {} {:<32} {}",
+                                    "✖ FAIL".on_red().white().bold(),
+                                    sev,
+                                    f.check_id.bold().red(),
+                                    f.title.dimmed()
+                                );
+                            } else {
+                                println!(
+                                    "    {} {} {}",
+                                    "✖ FAIL".on_red().white().bold(),
+                                    sev,
+                                    f.check_id.bold().red()
+                                );
+                            }
                             println!("       {:<7} {}", "Issue:".red(), f.description);
                             if let Some(fix) = &f.nixos_fix {
                                 let formatted_fix = fix.trim().replace('\n', "\n               ");
@@ -347,7 +402,7 @@ async fn main() {
                                     formatted_fix.cyan()
                                 );
                             }
-                            if args.verbose {
+                            if show_all_info {
                                 if !f.items.is_empty() {
                                     println!(
                                         "       {:<7} {}",
