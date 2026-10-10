@@ -71,7 +71,57 @@ impl Checker for SshChecker {
                 },
                 doc_url: Some("https://man7.org/linux/man-pages/man5/sshd_config.5.html"),
             });
+        } else {
+            findings.push(Finding {
+                domain: self.domain(),
+                check_id: "SSH_SERVER_CONFIG".to_string(),
+                title: "OpenSSH Daemon Configuration (/etc/ssh/sshd_config)".to_string(),
+                severity: Severity::Info,
+                status: Status::Pass,
+                description: "OpenSSH server daemon is not active or not configured (no attack surface exposed)".to_string(),
+                items: Vec::new(),
+                nixos_fix: None,
+                doc_url: Some("https://man7.org/linux/man-pages/man5/sshd_config.5.html"),
+            });
         }
+
+        // 2. SSH Host Key Cryptographic Strength
+        let mut weak_host_keys = Vec::new();
+        let mut modern_host_keys = Vec::new();
+        if Path::new("/etc/ssh/ssh_host_dsa_key").exists()
+            || Path::new("/etc/ssh/ssh_host_dsa_key.pub").exists()
+        {
+            weak_host_keys
+                .push("Legacy DSA host key present (/etc/ssh/ssh_host_dsa_key)".to_string());
+        }
+        if Path::new("/etc/ssh/ssh_host_ed25519_key").exists() {
+            modern_host_keys.push("Ed25519 elliptic curve host key active".to_string());
+        }
+        if Path::new("/etc/ssh/ssh_host_rsa_key").exists() {
+            modern_host_keys.push("RSA host key active".to_string());
+        }
+        let has_weak_host = !weak_host_keys.is_empty();
+        findings.push(Finding {
+            domain: self.domain(),
+            check_id: "SSH_HOST_KEYS_STRENGTH".to_string(),
+            title: "OpenSSH Host Keys Cryptographic Strength".to_string(),
+            severity: Severity::High,
+            status: if has_weak_host { Status::Fail } else { Status::Pass },
+            description: if has_weak_host {
+                format!("Detected {} obsolete or weak host keys", weak_host_keys.len())
+            } else if !modern_host_keys.is_empty() {
+                format!("Modern cryptographic host keys configured ({})", modern_host_keys.join(", "))
+            } else {
+                "No SSH host keys found (server daemon disabled)".to_string()
+            },
+            items: weak_host_keys,
+            nixos_fix: if has_weak_host {
+                Some("services.openssh.hostKeys = [\n  { path = \"/etc/ssh/ssh_host_ed25519_key\"; type = \"ed25519\"; }\n];".to_string())
+            } else {
+                None
+            },
+            doc_url: Some("https://infosec.mozilla.org/guidelines/openssh"),
+        });
 
         // 2. SSH User Authorized Keys & Permissions Audit
         let mut key_candidates = Vec::new();
