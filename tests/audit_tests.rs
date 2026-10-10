@@ -181,4 +181,17 @@ mod tests {
         assert!(module.contains("security.sudo.wheelNeedsPassword = true;"));
         assert!(!module.contains("should.not.be.included"));
     }
+
+    #[tokio::test]
+    async fn test_live_network_checker_runs() {
+        let checker = fabel::checks::live_network::LiveNetworkChecker;
+        let findings = checker.run().await;
+        assert!(
+            !findings.is_empty(),
+            "LiveNetworkChecker should return findings"
+        );
+        for f in &findings {
+            assert!(!f.check_id.is_empty());
+        }
+    }
 }

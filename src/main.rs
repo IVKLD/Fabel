@@ -100,6 +100,7 @@ async fn main() {
         checks::pki::PkiChecker,
         checks::network_dpi::NetworkDpiChecker,
         checks::internet_intercept::InternetInterceptChecker,
+        checks::live_network::LiveNetworkChecker,
         checks::network_firewall::NetworkFirewallChecker,
         checks::data_leaks::DataLeaksChecker,
         checks::anti_forensics::AntiForensicsChecker,
