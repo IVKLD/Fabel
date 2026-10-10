@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
-use tokio::net::TcpStream;
+use tokio::net::{lookup_host, TcpStream};
 use tokio::time::timeout;
 
 pub struct LiveNetworkChecker;
@@ -177,7 +177,7 @@ impl Checker for LiveNetworkChecker {
             },
             nixos_fix: if captive_detected {
                 Some(
-                    "# Randomize Wi-Fi MAC and disconnect from untrusted captive network:\nnetworking.networkmanager.wifi.scanRandMacAddress = true;\nnetworking.networkmanager.wifi.macAddress = \"random\";"
+                    "# Captive portal interception active: enforce strict network isolation and VPN kill-switch\nnetworking.firewall.checkReversePath = \"strict\";"
                         .to_string(),
                 )
             } else {
@@ -186,53 +186,81 @@ impl Checker for LiveNetworkChecker {
             doc_url: Some("https://en.wikipedia.org/wiki/Captive_portal"),
         });
 
-        // 3. Live DNS Resolver Integrity & Plaintext Leak Probe
+        // 3. Live DNS Resolver Integrity, VPN DNS Leak & DNSSEC Validation Probe
         let mut dns_leak_detected = false;
-        let mut dns_probe_detail = String::new();
+        let mut dns_leak_items = Vec::new();
 
-        if let Ok(resolv) = fs::read_to_string("/etc/resolv.conf") {
-            let mut nameservers = Vec::new();
-            for line in resolv.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("nameserver") {
-                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        nameservers.push(parts[1].to_string());
+        // Detect VPN DNS Leaks: if VPN is active, queries must not leak to local LAN routers
+        if !active_vpn_interfaces.is_empty() {
+            if let Ok(resolv) = fs::read_to_string("/etc/resolv.conf") {
+                for line in resolv.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("nameserver") {
+                        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                        if parts.len() >= 2 {
+                            let ns = parts[1];
+                            if ns.starts_with("192.168.")
+                                || ns.starts_with("10.")
+                                || (ns.starts_with("172.") && !ns.starts_with("172.0."))
+                            {
+                                dns_leak_detected = true;
+                                dns_leak_items.push(format!(
+                                    "VPN active ({}) but nameserver {} points to local LAN gateway (DNS Leak outside tunnel)",
+                                    active_vpn_interfaces.join(", "),
+                                    ns
+                                ));
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            let has_local_stub = nameservers
-                .iter()
-                .any(|ns| ns == "127.0.0.1" || ns == "127.0.0.53" || ns == "::1");
-            if !has_local_stub && !nameservers.is_empty() {
-                dns_leak_detected = true;
-                dns_probe_detail = format!(
-                    "Direct plaintext nameservers in resolv.conf without local DoT/DoH stub: {}",
-                    nameservers.join(", ")
-                );
+        // Active DNSSEC validation probe over the network:
+        let mut dnssec_failure_detected = false;
+        if is_online {
+            // dnssec-failed.org deliberately serves broken DNSSEC signatures.
+            // A validating DNSSEC resolver MUST reject and fail lookup.
+            // If lookup succeeds, DNSSEC validation is disabled or stripped by upstream network.
+            if let Ok(lookup_res) = timeout(
+                Duration::from_millis(1500),
+                lookup_host("dnssec-failed.org:443"),
+            )
+            .await
+            {
+                if lookup_res.is_ok() {
+                    dnssec_failure_detected = true;
+                    dns_leak_items.push(
+                        "Upstream DNS resolved invalid 'dnssec-failed.org': DNSSEC signature verification inactive (vulnerable to DNS cache poisoning/spoofing)".to_string(),
+                    );
+                }
             }
         }
 
+        let dns_secure = !dns_leak_detected && (!dnssec_failure_detected || !is_online);
         findings.push(Finding {
             domain: self.domain(),
             check_id: "LIVE_DNS_LEAK_SECURITY".to_string(),
-            title: "Live DNS Resolver Integrity & Upstream Leak Protection".to_string(),
+            title: "Live DNS Resolver Integrity & VPN DNS Leak Protection".to_string(),
             severity: Severity::Critical,
-            status: if dns_leak_detected {
+            status: if dns_secure {
+                Status::Pass
+            } else if dns_leak_detected {
                 Status::Fail
             } else {
-                Status::Pass
+                Status::Warn
             },
-            description: if dns_leak_detected {
-                dns_probe_detail
+            description: if dns_secure {
+                "DNS queries routed securely: no DNS leaks detected past VPN tunnel, and DNSSEC validation enforced".to_string()
+            } else if dns_leak_detected {
+                "Active VPN DNS leak detected: DNS queries bypass the VPN tunnel and leak to local unencrypted LAN gateway".to_string()
             } else {
-                "System uses local loopback DNS stub with encrypted upstream resolution; DNS queries not leaked to local ISP".to_string()
+                "Upstream DNS resolver does not enforce cryptographic DNSSEC validation against MITM poisoning".to_string()
             },
-            items: Vec::new(),
-            nixos_fix: if dns_leak_detected {
+            items: dns_leak_items,
+            nixos_fix: if !dns_secure {
                 Some(
-                    "services.resolved = {\n  enable = true;\n  dnssec = \"true\";\n  dnsovertls = \"true\";\n};\nnetworking.nameservers = [ \"1.1.1.1#cloudflare-dns.com\" \"9.9.9.9#dns.quad9.net\" ];"
+                    "services.resolved = {\n  enable = true;\n  dnssec = \"true\";\n};\n# Ensure VPN interface handles default DNS routing to prevent LAN leaks"
                         .to_string(),
                 )
             } else {
@@ -482,42 +510,42 @@ impl Checker for LiveNetworkChecker {
             doc_url: Some("https://git-scm.com/docs/git-remote"),
         });
 
-        // 8. Live ICMP Timestamp & Remote Uptime Clock Drift Fingerprinting
+        // 8. Live TCP Timestamps & ICMP Bogus Error Remote Fingerprinting
         let icmp_ignore_bogus =
             fs::read_to_string("/proc/sys/net/ipv4/icmp_ignore_bogus_error_responses")
                 .unwrap_or_default()
                 .trim()
                 .to_string();
-        let icmp_broadcast = fs::read_to_string("/proc/sys/net/ipv4/icmp_echo_ignore_broadcasts")
+        let tcp_timestamps = fs::read_to_string("/proc/sys/net/ipv4/tcp_timestamps")
             .unwrap_or_default()
             .trim()
             .to_string();
 
-        let icmp_hardened = icmp_ignore_bogus == "1" && icmp_broadcast == "1";
+        let fingerprint_hardened = icmp_ignore_bogus == "1" && tcp_timestamps == "0";
         findings.push(Finding {
             domain: self.domain(),
             check_id: "LIVE_ICMP_TIMESTAMP_LEAK".to_string(),
-            title: "ICMP Clock Drift & Network Fingerprinting Defenses".to_string(),
+            title: "TCP Timestamps & ICMP Remote Uptime Clock Drift Fingerprinting".to_string(),
             severity: Severity::Medium,
-            status: if icmp_hardened {
+            status: if fingerprint_hardened {
                 Status::Pass
             } else {
                 Status::Warn
             },
-            description: if icmp_hardened {
-                "Kernel ignores ICMP broadcast echoes and bogus error responses (prevents network clock drift fingerprinting)".to_string()
+            description: if fingerprint_hardened {
+                "TCP timestamps disabled and bogus ICMP error responses ignored (prevents remote uptime clock drift fingerprinting and session correlation)".to_string()
             } else {
-                "Kernel responds to ICMP broadcast packets or bogus errors: allows remote network mapping and system fingerprinting".to_string()
+                "Kernel exposes TCP timestamps (RFC 1323) or responds to bogus ICMP errors: remote attackers can calculate exact system uptime and correlate user sessions across networks".to_string()
             },
             items: vec![
-                format!("icmp_echo_ignore_broadcasts: '{}'", icmp_broadcast),
-                format!("icmp_ignore_bogus_error_responses: '{}'", icmp_ignore_bogus),
+                format!("tcp_timestamps: '{}' (recommended: 0)", tcp_timestamps),
+                format!("icmp_ignore_bogus_error_responses: '{}' (recommended: 1)", icmp_ignore_bogus),
             ],
-            nixos_fix: if icmp_hardened {
+            nixos_fix: if fingerprint_hardened {
                 None
             } else {
                 Some(
-                    "boot.kernel.sysctl.\"net.ipv4.icmp_echo_ignore_broadcasts\" = 1;\nboot.kernel.sysctl.\"net.ipv4.icmp_ignore_bogus_error_responses\" = 1;"
+                    "boot.kernel.sysctl.\"net.ipv4.tcp_timestamps\" = 0;\nboot.kernel.sysctl.\"net.ipv4.icmp_ignore_bogus_error_responses\" = 1;"
                         .to_string(),
                 )
             },

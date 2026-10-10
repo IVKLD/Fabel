@@ -192,12 +192,27 @@ impl Checker for InternetInterceptChecker {
             .unwrap_or_default()
             .trim()
             .to_string();
+        let default_accept_redirects =
+            fs::read_to_string("/proc/sys/net/ipv4/conf/default/accept_redirects")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
         let send_redirects = fs::read_to_string("/proc/sys/net/ipv4/conf/all/send_redirects")
             .unwrap_or_default()
             .trim()
             .to_string();
+        let default_send_redirects =
+            fs::read_to_string("/proc/sys/net/ipv4/conf/default/send_redirects")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
         let accept_redirects_v6 =
             fs::read_to_string("/proc/sys/net/ipv6/conf/all/accept_redirects")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+        let default_accept_redirects_v6 =
+            fs::read_to_string("/proc/sys/net/ipv6/conf/default/accept_redirects")
                 .unwrap_or_default()
                 .trim()
                 .to_string();
@@ -206,12 +221,23 @@ impl Checker for InternetInterceptChecker {
         if accept_redirects != "0" {
             icmp_issues.push("net.ipv4.conf.all.accept_redirects=1 (allows rogue routers to hijack and redirect IP traffic)".to_string());
         }
+        if default_accept_redirects != "0" {
+            icmp_issues.push("net.ipv4.conf.default.accept_redirects=1 (new interfaces accept ICMP redirects)".to_string());
+        }
         if send_redirects != "0" {
             icmp_issues.push("net.ipv4.conf.all.send_redirects=1 (host sends ICMP redirects; acts as transit router)".to_string());
+        }
+        if default_send_redirects != "0" {
+            icmp_issues.push("net.ipv4.conf.default.send_redirects=1 (new interfaces send ICMP redirects)".to_string());
         }
         if accept_redirects_v6 != "0" {
             icmp_issues.push(
                 "net.ipv6.conf.all.accept_redirects=1 (allows IPv6 route hijacking)".to_string(),
+            );
+        }
+        if default_accept_redirects_v6 != "0" {
+            icmp_issues.push(
+                "net.ipv6.conf.default.accept_redirects=1 (new interfaces accept IPv6 redirects)".to_string(),
             );
         }
 
