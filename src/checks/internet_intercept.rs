@@ -222,13 +222,19 @@ impl Checker for InternetInterceptChecker {
             icmp_issues.push("net.ipv4.conf.all.accept_redirects=1 (allows rogue routers to hijack and redirect IP traffic)".to_string());
         }
         if default_accept_redirects != "0" {
-            icmp_issues.push("net.ipv4.conf.default.accept_redirects=1 (new interfaces accept ICMP redirects)".to_string());
+            icmp_issues.push(
+                "net.ipv4.conf.default.accept_redirects=1 (new interfaces accept ICMP redirects)"
+                    .to_string(),
+            );
         }
         if send_redirects != "0" {
             icmp_issues.push("net.ipv4.conf.all.send_redirects=1 (host sends ICMP redirects; acts as transit router)".to_string());
         }
         if default_send_redirects != "0" {
-            icmp_issues.push("net.ipv4.conf.default.send_redirects=1 (new interfaces send ICMP redirects)".to_string());
+            icmp_issues.push(
+                "net.ipv4.conf.default.send_redirects=1 (new interfaces send ICMP redirects)"
+                    .to_string(),
+            );
         }
         if accept_redirects_v6 != "0" {
             icmp_issues.push(
@@ -237,7 +243,8 @@ impl Checker for InternetInterceptChecker {
         }
         if default_accept_redirects_v6 != "0" {
             icmp_issues.push(
-                "net.ipv6.conf.default.accept_redirects=1 (new interfaces accept IPv6 redirects)".to_string(),
+                "net.ipv6.conf.default.accept_redirects=1 (new interfaces accept IPv6 redirects)"
+                    .to_string(),
             );
         }
 
