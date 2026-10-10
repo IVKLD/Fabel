@@ -263,24 +263,24 @@ async fn main() {
                 for f in relevant {
                     match &f.status {
                         Status::Pass => {
-                            println!(
-                                "    {}  {:<32} {}",
-                                "✔ PASS".green().bold(),
-                                f.check_id.white(),
-                                f.title.dimmed()
-                            );
-                            if args.verbose {
-                                println!("        Details: {}", f.description.green());
+                            if args.all {
+                                println!(
+                                    "    {}  {:<32} {}",
+                                    "✔ PASS".green(),
+                                    f.check_id.white(),
+                                    f.title.dimmed()
+                                );
                             }
                         }
                         Status::Skipped { reason } => {
-                            println!(
-                                "    {}  {:<32} {} ({})",
-                                "– SKIP".dimmed(),
-                                f.check_id.dimmed(),
-                                f.title.dimmed(),
-                                reason.dimmed()
-                            );
+                            if args.verbose {
+                                println!(
+                                    "    {}  {:<32} {}",
+                                    "– SKIP".dimmed(),
+                                    f.check_id.dimmed(),
+                                    format!("({})", reason).dimmed()
+                                );
+                            }
                         }
                         Status::Warn => {
                             let sev = match f.severity {
@@ -292,22 +292,12 @@ async fn main() {
                             };
                             println!();
                             println!(
-                                "    {} {} {:<30} {}",
+                                "    {} {} {}",
                                 "⚠ WARN".on_yellow().black().bold(),
                                 sev,
-                                f.check_id.bold().yellow(),
-                                f.title.bold().white()
+                                f.check_id.bold().yellow()
                             );
                             println!("       {:<7} {}", "Issue:".yellow(), f.description);
-                            if !f.items.is_empty() {
-                                let preview: Vec<String> =
-                                    f.items.iter().take(3).map(|s| s.to_string()).collect();
-                                let mut items_str = preview.join(", ");
-                                if f.items.len() > 3 {
-                                    items_str.push_str(&format!(" (+{} more)", f.items.len() - 3));
-                                }
-                                println!("       {:<7} {}", "Items:".dimmed(), items_str.cyan());
-                            }
                             if let Some(fix) = &f.nixos_fix {
                                 let formatted_fix = fix.trim().replace('\n', "\n               ");
                                 println!(
@@ -316,12 +306,21 @@ async fn main() {
                                     formatted_fix.cyan()
                                 );
                             }
-                            if let Some(url) = f.doc_url {
-                                println!(
-                                    "       {:<7} {}",
-                                    "Docs:".dimmed(),
-                                    url.underline().dimmed()
-                                );
+                            if args.verbose {
+                                if !f.items.is_empty() {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Items:".dimmed(),
+                                        f.items.join(", ").cyan()
+                                    );
+                                }
+                                if let Some(url) = f.doc_url {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
                             }
                         }
                         Status::Fail => {
@@ -334,22 +333,12 @@ async fn main() {
                             };
                             println!();
                             println!(
-                                "    {} {} {:<30} {}",
+                                "    {} {} {}",
                                 "✖ FAIL".on_red().white().bold(),
                                 sev,
-                                f.check_id.bold().red(),
-                                f.title.bold().white()
+                                f.check_id.bold().red()
                             );
                             println!("       {:<7} {}", "Issue:".red(), f.description);
-                            if !f.items.is_empty() {
-                                let preview: Vec<String> =
-                                    f.items.iter().take(3).map(|s| s.to_string()).collect();
-                                let mut items_str = preview.join(", ");
-                                if f.items.len() > 3 {
-                                    items_str.push_str(&format!(" (+{} more)", f.items.len() - 3));
-                                }
-                                println!("       {:<7} {}", "Items:".dimmed(), items_str.yellow());
-                            }
                             if let Some(fix) = &f.nixos_fix {
                                 let formatted_fix = fix.trim().replace('\n', "\n               ");
                                 println!(
@@ -358,12 +347,21 @@ async fn main() {
                                     formatted_fix.cyan()
                                 );
                             }
-                            if let Some(url) = f.doc_url {
-                                println!(
-                                    "       {:<7} {}",
-                                    "Docs:".dimmed(),
-                                    url.underline().dimmed()
-                                );
+                            if args.verbose {
+                                if !f.items.is_empty() {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Items:".dimmed(),
+                                        f.items.join(", ").yellow()
+                                    );
+                                }
+                                if let Some(url) = f.doc_url {
+                                    println!(
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
                             }
                         }
                     }
