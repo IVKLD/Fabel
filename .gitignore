@@ -1,0 +1,25 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Nix build outputs and direnv
+result
+result-*
+.direnv/
+
+# Local test & audit generated files
+*-report.json
+sentinel-hardening.nix
+test-hardening.nix
+sentinel-hardened.nix
+hardened.nix
+anti-surveillance.nix
+
+# Editor & OS artifacts
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

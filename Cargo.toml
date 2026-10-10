@@ -1,0 +1,22 @@
+[package]
+name = "nix-sentinel"
+version = "0.3.0"
+edition = "2021"
+authors = ["Principal Security Architecture Team"]
+description = "Host-based Threat Detection, Counter-Surveillance & Hardening Engine for NixOS"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/nix-sentinel/nix-sentinel"
+homepage = "https://github.com/nix-sentinel/nix-sentinel"
+keywords = ["nixos", "security", "audit", "hardening", "anti-surveillance"]
+categories = ["command-line-utilities", "security-tools"]
+
+[dependencies]
+tokio = { version = "1.38", features = ["full"] }
+clap = { version = "4.5", features = ["derive"] }
+colored = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+x509-parser = "0.16"
+libc = "0.2"
