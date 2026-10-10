@@ -26,7 +26,7 @@ macro_rules! emit {
 #[command(
     name = "fabel",
     author = "Principal Security Architecture Team",
-    version = "0.3.0",
+    version = env!("CARGO_PKG_VERSION"),
     about = "Host-based Threat Detection & Deep Security Audit Engine for NixOS",
     long_about = "fabel is a specialized Host Security & Integrity Audit Engine for NixOS.\nIt identifies configuration weaknesses, hidden interception channels, rootkits, and DPI interference,\nand can automatically generate ready-to-import declarative NixOS hardening configurations."
 )]
@@ -76,7 +76,7 @@ async fn main() {
         "  {}  {} {}",
         "🛡️".bold(),
         "fabel".cyan().bold(),
-        "v0.3.0".dimmed()
+        format!("v{}", env!("CARGO_PKG_VERSION")).dimmed()
     );
     emit!(
         out,
