@@ -260,7 +260,7 @@ impl Checker for LiveNetworkChecker {
             items: dns_leak_items,
             nixos_fix: if !dns_secure {
                 Some(
-                    "services.resolved = {\n  enable = true;\n  dnssec = \"true\";\n};\n# Ensure VPN interface handles default DNS routing to prevent LAN leaks"
+                    "# Prevent VPN DNS leaks to LAN and enforce DNSSEC validation:\nservices.resolved.dnssec = \"true\";\nnetworking.networkmanager.dns = \"systemd-resolved\";"
                         .to_string(),
                 )
             } else {

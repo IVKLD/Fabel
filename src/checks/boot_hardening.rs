@@ -200,11 +200,11 @@ impl Checker for BootHardeningChecker {
             },
             items: Vec::new(),
             nixos_fix: if unencrypted_boot {
-                Some("# Enable UEFI Secure Boot with Lanzaboote to verify boot stages:\nboot.lanzaboote.enable = true;".to_string())
+                Some("# Protect boot stages with TPM2 PCR policy validation:\nboot.initrd.systemd.tpm2.enable = true;".to_string())
             } else {
                 None
             },
-            doc_url: Some("https://github.com/nix-community/lanzaboote/blob/master/docs/QUICK_START.md"),
+            doc_url: Some("https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#TPM2"),
         });
 
         // 2. Kernel Lockdown Mode

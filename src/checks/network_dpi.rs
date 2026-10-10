@@ -126,7 +126,7 @@ impl Checker for NetworkDpiChecker {
             (
                 Status::Fail,
                 "CRITICAL: Port 53 transparent interception detected (ISP/DPI blackhole returned reply)!".to_string(),
-                Some("services.resolved = {\n  enable = true;\n  dnssec = \"true\";\n  dnsovertls = \"true\";\n};".to_string()),
+                Some("networking.firewall.extraCommands = \"\"\"\n  iptables -A OUTPUT -p udp --dport 53 -j REJECT\n  iptables -A OUTPUT -p tcp --dport 53 -j REJECT\n\"\"\";".to_string()),
             )
         };
 
