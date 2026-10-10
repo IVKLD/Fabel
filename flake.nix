@@ -27,7 +27,7 @@
 
             meta = with pkgs.lib; {
               description = "Next-gen Host Security Audit & Hardening Engine for NixOS";
-              homepage = "https://github.com/nix-sentinel/fable";
+              homepage = "https://github.com/IVKLD/Fabel";
               license = licenses.mit;
               mainProgram = "fabel";
               platforms = platforms.linux;

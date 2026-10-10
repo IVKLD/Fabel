@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -e
+
+echo "==> [pre-commit] Checking Rust formatting..."
+if command -v nix &>/dev/null && [ -f flake.nix ]; then
+    nix develop --command cargo fmt -- --check
+else
+    cargo fmt -- --check
+fi
+
+echo "==> [pre-commit] Running Rust Clippy linter..."
+if command -v nix &>/dev/null && [ -f flake.nix ]; then
+    nix develop --command cargo clippy --all-targets -- -D warnings
+else
+    cargo clippy --all-targets -- -D warnings
+fi
+
+echo "==> [pre-commit] All formatting and linter checks passed!"

@@ -6,10 +6,22 @@ authors = ["Principal Security Architecture Team"]
 description = "Host-based Threat Detection, Counter-Surveillance & Hardening Engine for NixOS"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/nix-sentinel/fable"
-homepage = "https://github.com/nix-sentinel/fable"
+repository = "https://github.com/IVKLD/Fabel"
+homepage = "https://github.com/IVKLD/Fabel"
 keywords = ["nixos", "security", "audit", "hardening", "anti-surveillance"]
 categories = ["command-line-utilities", "security-tools"]
+
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+all = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+needless_borrow = "warn"
+redundant_clone = "warn"
+semicolon_if_nothing_returned = "warn"
 
 [lib]
 name = "fabel"
