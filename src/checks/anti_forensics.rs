@@ -46,7 +46,7 @@ impl Checker for AntiForensicsChecker {
             },
             items: Vec::new(),
             nixos_fix: if has_disk_journal {
-                Some("services.journald.extraConfig = \"\"\"\nStorage=volatile\nRuntimeMaxUse=64M\n\"\"\";".to_string())
+                Some("services.journald.extraConfig = ''\n  Storage=volatile\n  RuntimeMaxUse=64M\n'';".to_string())
             } else {
                 None
             },
@@ -83,7 +83,7 @@ impl Checker for AntiForensicsChecker {
             nixos_fix: if hidepid_active {
                 None
             } else {
-                Some("security.hideProcessInformation = true;".to_string())
+                Some("# Note: security.hideProcessInformation is removed in NixOS on cgroups-v2; process isolation is enforced per-service via systemd (ProtectProc=invisible).".to_string())
             },
             doc_url: Some("https://www.kernel.org/doc/html/latest/filesystems/proc.html#mount-options"),
         });
@@ -152,7 +152,7 @@ impl Checker for AntiForensicsChecker {
             nixos_fix: if dhcp_hostname_disabled {
                 None
             } else {
-                Some("networking.networkmanager.extraConfig = \"\"\"\n[connection]\nipv4.dhcp-send-hostname=false\nipv6.dhcp-send-hostname=false\n\"\"\";".to_string())
+                Some("networking.networkmanager.settings.connection.\"ipv4.dhcp-send-hostname\" = false;\nnetworking.networkmanager.settings.connection.\"ipv6.dhcp-send-hostname\" = false;".to_string())
             },
             doc_url: Some("https://networkmanager.dev/docs/api/latest/nm-settings-nmcli.html"),
         });

@@ -74,7 +74,7 @@ impl Checker for CoreDumpsChecker {
             nixos_fix: if passes_coredump {
                 None
             } else {
-                Some("systemd.coredump.enable = false;\nsystemd.coredump.extraConfig = \"Storage=none\";".to_string())
+                Some("systemd.coredump.enable = false;".to_string())
             },
             doc_url: Some("https://man7.org/linux/man-pages/man5/coredump.conf.5.html"),
         });

@@ -1,4 +1,4 @@
-use crate::types::{Checker, Finding, Severity, Status};
+use crate::types::{Checker, Finding, ProgressReporter, Severity, Status};
 use async_trait::async_trait;
 use std::fs;
 use std::path::Path;
@@ -39,9 +39,17 @@ impl Checker for NetworkDpiChecker {
     }
 
     async fn run(&self) -> Vec<Finding> {
+        self.run_with_progress(&ProgressReporter::noop()).await
+    }
+
+    async fn run_with_progress(&self, progress: &ProgressReporter) -> Vec<Finding> {
         let mut findings = Vec::new();
 
         // 1. Transparent Port 53 DNS Redirection Check
+        progress.step(
+            self.domain(),
+            "Probing transparent DNS (UDP:53) redirection",
+        );
         let dns_query = [
             0x13, 0x37, // ID
             0x01, 0x00, // Standard query
@@ -126,7 +134,7 @@ impl Checker for NetworkDpiChecker {
             (
                 Status::Fail,
                 "CRITICAL: Port 53 transparent interception detected (ISP/DPI blackhole returned reply)!".to_string(),
-                Some("networking.firewall.extraCommands = \"\"\"\n  iptables -A OUTPUT -p udp --dport 53 -j REJECT\n  iptables -A OUTPUT -p tcp --dport 53 -j REJECT\n\"\"\";".to_string()),
+                Some("networking.firewall.extraCommands = ''\n  iptables -A OUTPUT -p udp --dport 53 -j REJECT\n  iptables -A OUTPUT -p tcp --dport 53 -j REJECT\n'';".to_string()),
             )
         };
 
@@ -143,6 +151,10 @@ impl Checker for NetworkDpiChecker {
         });
 
         // 2. QUIC / UDP:443 Accessibility & Throttling
+        progress.step(
+            self.domain(),
+            "Testing QUIC (UDP:443) protocol censorship & throttling",
+        );
         // Probe Google and Cloudflare QUIC endpoints with Initial QUIC Packet
         let quic_initial = [
             0xc0, 0x00, 0x00, 0x00, 0x01, // Long header, version 1
@@ -195,6 +207,10 @@ impl Checker for NetworkDpiChecker {
         });
 
         // 3. ECH Suppression & Connectivity Check Leaks (Table-driven)
+        progress.step(
+            self.domain(),
+            "Checking ambient connectivity telemetry endpoints",
+        );
         let mut leak_findings = Vec::new();
         for rule in CONNECTIVITY_RULES {
             if Path::new(rule.file).exists() {
@@ -220,7 +236,7 @@ impl Checker for NetworkDpiChecker {
             },
             items: leak_findings,
             nixos_fix: if has_leaks {
-                Some("networking.networkmanager.extraConfig = \"\"\"\n[connectivity]\nenabled=false\n\"\"\";".to_string())
+                Some("networking.networkmanager.settings.connectivity.enabled = false;".to_string())
             } else {
                 None
             },

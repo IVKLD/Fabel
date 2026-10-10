@@ -1,10 +1,9 @@
-use crate::types::{Checker, Finding, Severity, Status};
+use crate::types::{Checker, Finding, ProgressReporter, Severity, Status};
 use async_trait::async_trait;
 use std::env;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::process::Command;
 use std::time::Duration;
 use tokio::net::{lookup_host, TcpStream};
 use tokio::time::timeout;
@@ -18,10 +17,18 @@ impl Checker for LiveNetworkChecker {
     }
 
     async fn run(&self) -> Vec<Finding> {
+        self.run_with_progress(&ProgressReporter::noop()).await
+    }
+
+    async fn run_with_progress(&self, progress: &ProgressReporter) -> Vec<Finding> {
         let mut findings = Vec::new();
 
         // 1. Live Public External IP & VPN Tunnel Leak Probe
-        let trace_output = Command::new("curl")
+        progress.step(
+            self.domain(),
+            "Probing external egress IP & VPN tunnel route",
+        );
+        let trace_output = tokio::process::Command::new("curl")
             .args([
                 "-s",
                 "--max-time",
@@ -30,7 +37,8 @@ impl Checker for LiveNetworkChecker {
                 "2",
                 "https://1.1.1.1/cdn-cgi/trace",
             ])
-            .output();
+            .output()
+            .await;
 
         let mut external_ip = String::new();
         let mut country = String::new();
@@ -121,7 +129,11 @@ impl Checker for LiveNetworkChecker {
         }
 
         // 2. Live Captive Portal & Rogue Wi-Fi Interception Probe
-        let captive_res = Command::new("curl")
+        progress.step(
+            self.domain(),
+            "Checking captive portal & rogue Wi-Fi canary",
+        );
+        let captive_res = tokio::process::Command::new("curl")
             .args([
                 "-s",
                 "-o",
@@ -134,7 +146,8 @@ impl Checker for LiveNetworkChecker {
                 "2",
                 "http://connectivitycheck.gstatic.com/generate_204",
             ])
-            .output();
+            .output()
+            .await;
 
         let mut captive_detected = false;
         let mut captive_status_code = String::new();
@@ -187,6 +200,10 @@ impl Checker for LiveNetworkChecker {
         });
 
         // 3. Live DNS Resolver Integrity, VPN DNS Leak & DNSSEC Validation Probe
+        progress.step(
+            self.domain(),
+            "Validating DNS resolver integrity & DNSSEC validation",
+        );
         let mut dns_leak_detected = false;
         let mut dns_leak_items = Vec::new();
 
@@ -260,7 +277,7 @@ impl Checker for LiveNetworkChecker {
             items: dns_leak_items,
             nixos_fix: if !dns_secure {
                 Some(
-                    "# Prevent VPN DNS leaks to LAN and enforce DNSSEC validation:\nservices.resolved.dnssec = \"true\";\nnetworking.networkmanager.dns = \"systemd-resolved\";"
+                    "# Prevent VPN DNS leaks to LAN and enforce DNSSEC validation:\nservices.resolved.settings.Resolve.DNSSEC = \"true\";\nnetworking.networkmanager.dns = \"systemd-resolved\";"
                         .to_string(),
                 )
             } else {
@@ -270,6 +287,10 @@ impl Checker for LiveNetworkChecker {
         });
 
         // 4. WebRTC STUN/TURN Public and Local IP Leak Surface
+        progress.step(
+            self.domain(),
+            "Checking browser WebRTC STUN/ICE IP leak exposure",
+        );
         let home = env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         let mut webrtc_vulnerable_browsers = Vec::new();
 
@@ -334,6 +355,10 @@ impl Checker for LiveNetworkChecker {
         });
 
         // 5. Active Credentials & API Secrets Exposed to Cloud/Network Exfiltration
+        progress.step(
+            self.domain(),
+            "Auditing credentials, SSH keys & secret permissions",
+        );
         let mut exposed_secrets = Vec::new();
 
         // Check SSH keys permissions
@@ -420,6 +445,10 @@ impl Checker for LiveNetworkChecker {
         });
 
         // 6. Outbound High-Risk Egress Port Filtering (SMB/CIFS Port 445 Leak)
+        progress.step(
+            self.domain(),
+            "Testing outbound high-risk SMB (TCP:445) egress",
+        );
         // Test if outbound TCP port 445 (SMB) connects or is filtered
         let smb_egress_test = timeout(
             Duration::from_millis(500),
@@ -456,7 +485,7 @@ impl Checker for LiveNetworkChecker {
             },
             nixos_fix: if smb_egress_open {
                 Some(
-                    "networking.firewall.extraCommands = \"\"\"\n  iptables -A OUTPUT -p tcp --dport 445 -j REJECT\n  iptables -A OUTPUT -p tcp --dport 139 -j REJECT\n\"\"\";"
+                    "networking.firewall.extraCommands = ''\n  iptables -A OUTPUT -p tcp --dport 445 -j REJECT\n  iptables -A OUTPUT -p tcp --dport 139 -j REJECT\n'';"
                         .to_string(),
                 )
             } else {
@@ -466,8 +495,16 @@ impl Checker for LiveNetworkChecker {
         });
 
         // 7. Git Cleartext HTTP Push & Remote Interception Leak
+        progress.step(
+            self.domain(),
+            "Verifying Git remote protocols for cleartext HTTP",
+        );
         let mut cleartext_git_remotes = Vec::new();
-        if let Ok(output) = Command::new("git").args(["remote", "-v"]).output() {
+        if let Ok(output) = tokio::process::Command::new("git")
+            .args(["remote", "-v"])
+            .output()
+            .await
+        {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
                 for line in text.lines() {
@@ -511,6 +548,10 @@ impl Checker for LiveNetworkChecker {
         });
 
         // 8. Live TCP Timestamps & ICMP Bogus Error Remote Fingerprinting
+        progress.step(
+            self.domain(),
+            "Checking TCP timestamps & ICMP fingerprinting",
+        );
         let icmp_ignore_bogus =
             fs::read_to_string("/proc/sys/net/ipv4/icmp_ignore_bogus_error_responses")
                 .unwrap_or_default()

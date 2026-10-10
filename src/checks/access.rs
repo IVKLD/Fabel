@@ -1,4 +1,4 @@
-use crate::types::{is_root, Checker, Finding, Severity, Status};
+use crate::types::{is_root, Checker, Finding, ProgressReporter, Severity, Status};
 use async_trait::async_trait;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -49,9 +49,17 @@ impl Checker for AccessChecker {
     }
 
     async fn run(&self) -> Vec<Finding> {
+        self.run_with_progress(&ProgressReporter::noop()).await
+    }
+
+    async fn run_with_progress(&self, progress: &ProgressReporter) -> Vec<Finding> {
         let mut findings = Vec::new();
 
         // 1. SUID/SGID Audit outside managed wrappers
+        progress.step(
+            self.domain(),
+            "Scanning filesystem for unmanaged SUID/SGID binaries",
+        );
         let mut untracked_suid = Vec::new();
         for candidate in &["/tmp", "/var/tmp", "/home", "/root"] {
             let p = Path::new(candidate);
@@ -78,6 +86,10 @@ impl Checker for AccessChecker {
         });
 
         // 2. /etc/passwd UID 0 Cross-Check
+        progress.step(
+            self.domain(),
+            "Auditing superuser accounts (UID 0) in /etc/passwd",
+        );
         if let Ok(passwd_content) = fs::read_to_string("/etc/passwd") {
             let mut uid_zero_users = Vec::new();
             for line in passwd_content.lines() {
@@ -113,6 +125,10 @@ impl Checker for AccessChecker {
         }
 
         // 3. /etc/shadow Permissions & Password Hashes
+        progress.step(
+            self.domain(),
+            "Auditing /etc/shadow permissions & empty password hashes",
+        );
         let shadow_path = "/etc/shadow";
         if Path::new(shadow_path).exists() {
             if is_root() {
@@ -163,7 +179,7 @@ impl Checker for AccessChecker {
                             format!("Found {} accounts with empty password hashes in /etc/shadow", empty_count)
                         },
                         items: empty_passwords,
-                        nixos_fix: Some("users.mutableUsers = false;\nusers.users.<name>.initialHashedPassword = \"...\";".to_string()),
+                        nixos_fix: Some("users.mutableUsers = false;\n# Set initial passwords declaratively:\n# users.users.<username>.initialHashedPassword = \"...\";".to_string()),
                         doc_url: Some("https://man7.org/linux/man-pages/man5/shadow.5.html"),
                     });
                 }
@@ -185,6 +201,10 @@ impl Checker for AccessChecker {
         }
 
         // 4. Sudoers NOPASSWD Escalation Audit
+        progress.step(
+            self.domain(),
+            "Auditing sudoers NOPASSWD: ALL escalation directives",
+        );
         let sudoers_file = "/etc/sudoers";
         if Path::new(sudoers_file).exists() {
             if let Ok(content) = fs::read_to_string(sudoers_file) {

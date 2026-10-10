@@ -1,4 +1,4 @@
-use crate::types::{Checker, Finding, Severity, Status};
+use crate::types::{Checker, Finding, ProgressReporter, Severity, Status};
 use async_trait::async_trait;
 use std::collections::HashSet;
 use std::env;
@@ -15,9 +15,17 @@ impl Checker for IntegrityChecker {
     }
 
     async fn run(&self) -> Vec<Finding> {
+        self.run_with_progress(&ProgressReporter::noop()).await
+    }
+
+    async fn run_with_progress(&self, progress: &ProgressReporter) -> Vec<Finding> {
         let mut findings = Vec::new();
 
         // 1. Dynamic Linker Hijacking (/etc/ld.so.preload)
+        progress.step(
+            self.domain(),
+            "Checking dynamic linker hijacking (/etc/ld.so.preload)",
+        );
         let preload_path = "/etc/ld.so.preload";
         if Path::new(preload_path).exists() {
             let content = fs::read_to_string(preload_path).unwrap_or_default();
@@ -64,6 +72,10 @@ impl Checker for IntegrityChecker {
         }
 
         // 2. Hidden Processes Cross-Check (/proc entry enumeration vs. signal 0 probe)
+        progress.step(
+            self.domain(),
+            "Scanning hidden processes (/proc vs kill-probe)",
+        );
         let mut proc_pids = HashSet::new();
         if let Ok(entries) = fs::read_dir("/proc") {
             for entry in entries.flatten() {
@@ -108,6 +120,10 @@ impl Checker for IntegrityChecker {
         });
 
         // 3. Tainted Kernel Analysis
+        progress.step(
+            self.domain(),
+            "Checking kernel taint status & out-of-tree drivers",
+        );
         if let Ok(tainted_str) = fs::read_to_string("/proc/sys/kernel/tainted") {
             let taint_val: u32 = tainted_str.trim().parse().unwrap_or(0);
             findings.push(Finding {
@@ -137,6 +153,10 @@ impl Checker for IntegrityChecker {
         }
 
         // 4. Fileless Malware & Executable Anon Memory / memfd_create
+        progress.step(
+            self.domain(),
+            "Scanning process memory for fileless anonymous execution",
+        );
         let mut suspicious_memory_pids = Vec::new();
         if let Ok(entries) = fs::read_dir("/proc") {
             for entry in entries.flatten() {
@@ -187,6 +207,10 @@ impl Checker for IntegrityChecker {
         });
 
         // 5. PATH Hijacking: Check for world-writable directories in PATH
+        progress.step(
+            self.domain(),
+            "Checking PATH for world-writable directory hijacking",
+        );
         if let Ok(path_var) = env::var("PATH") {
             let mut insecure_dirs = Vec::new();
             for dir in path_var.split(':') {

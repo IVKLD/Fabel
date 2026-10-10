@@ -15,12 +15,18 @@
 
 ### Без установки (Nix Flakes)
 ```bash
+# Стандартный запуск
 nix run github:IVKLD/Fabel
+
+# Передача флагов утилите (через разделитель '--'):
+nix run github:IVKLD/Fabel -- --help
+nix run github:IVKLD/Fabel -- --all
+nix run github:IVKLD/Fabel -- -t
 ```
 
-Или запуск во временном окружении:
+Или запуск во временном шелле:
 ```bash
-nix shell github:IVKLD/Fabel -c fabel
+nix shell github:IVKLD/Fabel -c fabel --help
 ```
 
 ### Сборка из исходников

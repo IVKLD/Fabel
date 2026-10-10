@@ -162,7 +162,7 @@ impl Checker for StealthChecker {
             },
             items: Vec::new(),
             nixos_fix: if is_x11 {
-                Some("# Migrate window manager / desktop environment to Wayland:\nservices.xserver.displayManager.gdm.wayland = true;".to_string())
+                Some("# Migrate window manager / desktop environment to Wayland:\nservices.displayManager.gdm.wayland = true;".to_string())
             } else {
                 None
             },
@@ -202,7 +202,7 @@ impl Checker for StealthChecker {
             },
             items: Vec::new(),
             nixos_fix: if !nts_enabled {
-                Some("services.chrony.enable = true;\nservices.chrony.extraConfig = \"\"\"\nserver time.cloudflare.com iburst nts\n\"\"\";".to_string())
+                Some("services.chrony.enable = true;\nservices.chrony.extraConfig = ''\n  server time.cloudflare.com iburst nts\n'';".to_string())
             } else {
                 None
             },

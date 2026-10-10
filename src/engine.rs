@@ -1,4 +1,6 @@
-use crate::types::{Checker, Finding, Severity, Status};
+use crate::types::{Checker, Finding, ProgressMsg, ProgressReporter, Severity, Status};
+use colored::*;
+use std::io::{IsTerminal, Write};
 use std::sync::Arc;
 use tokio::task::JoinSet;
 
@@ -38,13 +40,100 @@ impl AuditEngine {
     }
 
     pub async fn execute(&self) -> AuditReport {
+        self.execute_with_progress(std::io::stderr().is_terminal())
+            .await
+    }
+
+    pub async fn execute_with_progress(&self, show_spinner: bool) -> AuditReport {
         let start = std::time::Instant::now();
+        let total = self.checkers.len();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<ProgressMsg>();
+        let reporter = ProgressReporter::new(tx.clone());
+
+        let spinner_handle = if show_spinner && total > 0 {
+            Some(tokio::spawn(async move {
+                const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                let mut frame_idx = 0;
+                let start_time = std::time::Instant::now();
+                let mut active_domains = std::collections::HashSet::new();
+                let mut completed = 0;
+                let mut current_op = String::from("Initializing security probes...");
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(80));
+
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            let frame = SPINNER_FRAMES[frame_idx % SPINNER_FRAMES.len()];
+                            frame_idx += 1;
+                            let elapsed = start_time.elapsed().as_secs_f32();
+                            let max_len = 50;
+                            let display_op = if current_op.chars().count() > max_len {
+                                let s: String = current_op.chars().take(max_len - 3).collect();
+                                format!("{}...", s)
+                            } else {
+                                current_op.clone()
+                            };
+
+                            eprint!(
+                                "\r\x1b[2K  {} [{}/{}] {} ({:.1}s)",
+                                frame.cyan().bold(),
+                                completed,
+                                total,
+                                display_op.dimmed(),
+                                elapsed
+                            );
+                            let _ = std::io::stderr().flush();
+                        }
+                        msg = rx.recv() => {
+                            match msg {
+                                Some(ProgressMsg::Started { domain }) => {
+                                    active_domains.insert(domain);
+                                    current_op = format!("Auditing {}", domain);
+                                }
+                                Some(ProgressMsg::Step { detail }) => {
+                                    current_op = detail;
+                                }
+                                Some(ProgressMsg::Completed { domain }) => {
+                                    active_domains.remove(&domain);
+                                    completed += 1;
+                                    if completed >= total {
+                                        break;
+                                    }
+                                    if let Some(next_domain) = active_domains.iter().next() {
+                                        current_op = format!("Auditing {}", next_domain);
+                                    }
+                                }
+                                None => break,
+                            }
+                        }
+                    }
+                }
+
+                // Clear the loader line cleanly
+                eprint!("\r\x1b[2K");
+                let _ = std::io::stderr().flush();
+            }))
+        } else {
+            None
+        };
+
         let mut join_set = JoinSet::new();
 
         for checker in &self.checkers {
             let ch = Arc::clone(checker);
-            join_set.spawn(async move { ch.run().await });
+            let rep = reporter.clone();
+            let domain = ch.domain();
+            join_set.spawn(async move {
+                rep.started(domain);
+                let findings = ch.run_with_progress(&rep).await;
+                rep.completed(domain);
+                findings
+            });
         }
+
+        drop(reporter);
+        drop(tx);
 
         let mut findings = Vec::new();
         while let Some(res) = join_set.join_next().await {
@@ -53,6 +142,10 @@ impl AuditEngine {
             }
         }
         let duration = start.elapsed();
+
+        if let Some(handle) = spinner_handle {
+            let _ = handle.await;
+        }
 
         let mut passed = 0;
         let mut warned = 0;

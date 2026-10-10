@@ -71,7 +71,7 @@ impl Checker for InternetInterceptChecker {
             },
             items: if !dns_details.is_empty() { vec![dns_details] } else { Vec::new() },
             nixos_fix: if !dns_secure {
-                Some("services.resolved = {\n  enable = true;\n  dnssec = \"true\";\n  dnsovertls = \"true\";\n};\nnetworking.nameservers = [ \"1.1.1.1#cloudflare-dns.com\" \"9.9.9.9#dns.quad9.net\" ];".to_string())
+                Some("services.resolved = {\n  enable = true;\n  settings.Resolve = {\n    DNSSEC = \"true\";\n    DNSOverTLS = \"true\";\n  };\n};\nnetworking.nameservers = [ \"1.1.1.1#cloudflare-dns.com\" \"9.9.9.9#dns.quad9.net\" ];".to_string())
             } else {
                 None
             },
@@ -289,7 +289,7 @@ impl Checker for InternetInterceptChecker {
             },
             items: if !privacy_ext_active { vec![format!("use_tempaddr = {}", tempaddr)] } else { Vec::new() },
             nixos_fix: if !privacy_ext_active {
-                Some("boot.kernel.sysctl.\"net.ipv6.conf.all.use_tempaddr\" = 2;\nboot.kernel.sysctl.\"net.ipv6.conf.default.use_tempaddr\" = 2;".to_string())
+                Some("boot.kernel.sysctl.\"net.ipv6.conf.all.use_tempaddr\" = 2;\nboot.kernel.sysctl.\"net.ipv6.conf.default.use_tempaddr\" = lib.mkForce 2;".to_string())
             } else {
                 None
             },

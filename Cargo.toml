@@ -1,6 +1,7 @@
 [package]
 name = "fabel"
 version = "1.0.0"
+default-run = "fabel"
 edition = "2021"
 authors = ["Principal Security Architecture Team"]
 description = "Host-based Threat Detection, Counter-Surveillance & Hardening Engine for NixOS"
