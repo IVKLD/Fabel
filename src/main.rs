@@ -8,8 +8,19 @@ use colored::*;
 use engine::AuditEngine;
 use fix_generator::NixFixGenerator;
 use std::collections::BTreeMap;
+use std::fmt::Write as FmtWrite;
 use std::fs;
+use std::io::IsTerminal;
 use types::{Severity, Status};
+
+macro_rules! emit {
+    ($dst:expr) => {{
+        let _ = writeln!($dst);
+    }};
+    ($dst:expr, $($arg:tt)*) => {{
+        let _ = writeln!($dst, $($arg)*);
+    }};
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -40,6 +51,10 @@ struct Args {
     #[arg(short, long)]
     verbose: bool,
 
+    /// Disable interactive pager (less) and print output directly to stdout
+    #[arg(long)]
+    no_pager: bool,
+
     /// Generate a ready-to-import NixOS hardening module (.nix) containing remediation settings for all failed checks (pass '-' for stdout)
     #[arg(short, long, value_name = "HARDENING.nix")]
     generate_fix: Option<String>,
@@ -49,24 +64,33 @@ struct Args {
 async fn main() {
     let args = Args::parse();
 
-    println!();
-    println!(
+    if std::io::stdout().is_terminal() {
+        colored::control::set_override(true);
+    }
+
+    let mut out = String::new();
+
+    emit!(out);
+    emit!(
+        out,
         "  {}  {} {}",
         "🛡️".bold(),
         "nix-sentinel".cyan().bold(),
         "v0.3.0".dimmed()
     );
-    println!(
+    emit!(
+        out,
         "  {}",
         "Host Threat Detection & Hardening Audit for NixOS".dimmed()
     );
     if !types::is_root() {
-        println!(
+        emit!(
+            out,
             "  {}",
             "⚡ Running unprivileged: root-only probes (shadow, bpf) safely skipped.".yellow()
         );
     }
-    println!();
+    emit!(out);
 
     let mut engine = AuditEngine::new();
 
@@ -98,22 +122,263 @@ async fn main() {
         domains.entry(f.domain).or_default().push(f);
     }
 
-    // 1. High-level Domain Scorecard Table
-    println!(
+    // 1. Detailed Actionable Findings (unless --table-only is passed)
+    if !args.table_only {
+        let domains_with_findings: Vec<_> = domains
+            .iter()
+            .filter(|(_, findings)| {
+                args.all
+                    || findings
+                        .iter()
+                        .any(|f| f.status == Status::Fail || f.status == Status::Warn)
+            })
+            .collect();
+
+        let total_issues: usize = domains
+            .values()
+            .map(|findings| {
+                findings
+                    .iter()
+                    .filter(|f| f.status == Status::Fail || f.status == Status::Warn)
+                    .count()
+            })
+            .sum();
+
+        if total_issues == 0 && !args.all {
+            emit!(out);
+            emit!(
+                out,
+                "  {} {}",
+                "✔".green().bold(),
+                "All security checks passed! No vulnerabilities or hardening issues detected."
+                    .green()
+                    .bold()
+            );
+        } else {
+            emit!(out);
+            let header_title = if args.all {
+                format!(
+                    "━━━ Complete Security Audit Details ({} checks, {} issues detected) ━━━━━━━━━━",
+                    report.findings.len(),
+                    total_issues
+                )
+            } else {
+                format!(
+                    "━━━ Actionable Security Findings ({} issues detected) ━━━━━━━━━━━━━━━━━━━━",
+                    total_issues
+                )
+            };
+            emit!(out, "  {}", header_title.yellow().bold());
+
+            let show_all_info = args.all || args.verbose;
+
+            for (domain, findings) in domains_with_findings {
+                let relevant: Vec<_> = findings
+                    .iter()
+                    .filter(|f| args.all || f.status == Status::Fail || f.status == Status::Warn)
+                    .collect();
+
+                if relevant.is_empty() {
+                    continue;
+                }
+
+                emit!(out, "\n  {} {}", "▶".cyan().bold(), domain.bold().white());
+
+                for f in relevant {
+                    match &f.status {
+                        Status::Pass => {
+                            if args.all {
+                                emit!(out);
+                                emit!(
+                                    out,
+                                    "    {}  {:<32} {}",
+                                    "✔ PASS".green().bold(),
+                                    f.check_id.white(),
+                                    f.title.dimmed()
+                                );
+                                emit!(
+                                    out,
+                                    "       {:<7} {}",
+                                    "Details:".dimmed(),
+                                    f.description.green()
+                                );
+                                if !f.items.is_empty() {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Items:".dimmed(),
+                                        f.items.join(", ").cyan()
+                                    );
+                                }
+                                if let Some(url) = f.doc_url {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
+                            }
+                        }
+                        Status::Skipped { reason } => {
+                            if show_all_info {
+                                emit!(out);
+                                emit!(
+                                    out,
+                                    "    {}  {:<32} {}",
+                                    "– SKIP".dimmed(),
+                                    f.check_id.dimmed(),
+                                    f.title.dimmed()
+                                );
+                                emit!(out, "       {:<7} {}", "Reason:".dimmed(), reason.dimmed());
+                                if let Some(url) = f.doc_url {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
+                            }
+                        }
+                        Status::Warn => {
+                            let sev = match f.severity {
+                                Severity::Critical => "[CRIT]".red().bold(),
+                                Severity::High => "[HIGH]".bright_red().bold(),
+                                Severity::Medium => "[MED] ".yellow().bold(),
+                                Severity::Low => "[LOW] ".cyan(),
+                                Severity::Info => "[INFO]".dimmed(),
+                            };
+                            emit!(out);
+                            if show_all_info {
+                                emit!(
+                                    out,
+                                    "    {} {} {:<32} {}",
+                                    "⚠ WARN".on_yellow().black().bold(),
+                                    sev,
+                                    f.check_id.bold().yellow(),
+                                    f.title.dimmed()
+                                );
+                            } else {
+                                emit!(
+                                    out,
+                                    "    {} {} {}",
+                                    "⚠ WARN".on_yellow().black().bold(),
+                                    sev,
+                                    f.check_id.bold().yellow()
+                                );
+                            }
+                            emit!(out, "       {:<7} {}", "Issue:".yellow(), f.description);
+                            if let Some(fix) = &f.nixos_fix {
+                                let formatted_fix = fix.trim().replace('\n', "\n               ");
+                                emit!(
+                                    out,
+                                    "       {:<7} {}",
+                                    "Fix:".bright_magenta().bold(),
+                                    formatted_fix.cyan()
+                                );
+                            }
+                            if show_all_info {
+                                if !f.items.is_empty() {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Items:".dimmed(),
+                                        f.items.join(", ").cyan()
+                                    );
+                                }
+                                if let Some(url) = f.doc_url {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
+                            }
+                        }
+                        Status::Fail => {
+                            let sev = match f.severity {
+                                Severity::Critical => "[CRIT]".on_red().white().bold(),
+                                Severity::High => "[HIGH]".bright_red().bold(),
+                                Severity::Medium => "[MED] ".yellow().bold(),
+                                Severity::Low => "[LOW] ".cyan(),
+                                Severity::Info => "[INFO]".dimmed(),
+                            };
+                            emit!(out);
+                            if show_all_info {
+                                emit!(
+                                    out,
+                                    "    {} {} {:<32} {}",
+                                    "✖ FAIL".on_red().white().bold(),
+                                    sev,
+                                    f.check_id.bold().red(),
+                                    f.title.dimmed()
+                                );
+                            } else {
+                                emit!(
+                                    out,
+                                    "    {} {} {}",
+                                    "✖ FAIL".on_red().white().bold(),
+                                    sev,
+                                    f.check_id.bold().red()
+                                );
+                            }
+                            emit!(out, "       {:<7} {}", "Issue:".red(), f.description);
+                            if let Some(fix) = &f.nixos_fix {
+                                let formatted_fix = fix.trim().replace('\n', "\n               ");
+                                emit!(
+                                    out,
+                                    "       {:<7} {}",
+                                    "Fix:".bright_magenta().bold(),
+                                    formatted_fix.cyan()
+                                );
+                            }
+                            if show_all_info {
+                                if !f.items.is_empty() {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Items:".dimmed(),
+                                        f.items.join(", ").yellow()
+                                    );
+                                }
+                                if let Some(url) = f.doc_url {
+                                    emit!(
+                                        out,
+                                        "       {:<7} {}",
+                                        "Docs:".dimmed(),
+                                        url.underline().dimmed()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. High-level Domain Scorecard Table (at the bottom)
+    emit!(out);
+    emit!(
+        out,
         "  ┌{}┬{}┬{}┬{}┐",
         "─".repeat(54),
         "─".repeat(12),
         "─".repeat(16),
         "─".repeat(10)
     );
-    println!(
+    emit!(
+        out,
         "  │ {:<52} │ {:<10} │ {:<14} │ {:>8} │",
         "Security Domain".bold().white(),
         "Probes".bold().white(),
         "Status".bold().white(),
         "Score ".bold().white()
     );
-    println!(
+    emit!(
+        out,
         "  ├{}┼{}┼{}┼{}┤",
         "─".repeat(54),
         "─".repeat(12),
@@ -188,7 +453,8 @@ async fn main() {
             score_padded.red().bold()
         };
 
-        println!(
+        emit!(
+            out,
             "  │ {:<52} │ {:<10} │ {} │ {} │",
             domain_name,
             probes_str.dimmed(),
@@ -197,233 +463,14 @@ async fn main() {
         );
     }
 
-    println!(
+    emit!(
+        out,
         "  └{}┴{}┴{}┴{}┘",
         "─".repeat(54),
         "─".repeat(12),
         "─".repeat(16),
         "─".repeat(10)
     );
-
-    // 2. Actionable Findings (Only domains that have issues, unless --all is passed)
-    if !args.table_only {
-        let domains_with_findings: Vec<_> = domains
-            .iter()
-            .filter(|(_, findings)| {
-                args.all
-                    || findings
-                        .iter()
-                        .any(|f| f.status == Status::Fail || f.status == Status::Warn)
-            })
-            .collect();
-
-        let total_issues: usize = domains
-            .values()
-            .map(|findings| {
-                findings
-                    .iter()
-                    .filter(|f| f.status == Status::Fail || f.status == Status::Warn)
-                    .count()
-            })
-            .sum();
-
-        if total_issues == 0 && !args.all {
-            println!();
-            println!(
-                "  {} {}",
-                "✔".green().bold(),
-                "All security checks passed! No vulnerabilities or hardening issues detected."
-                    .green()
-                    .bold()
-            );
-        } else {
-            println!();
-            let header_title = if args.all {
-                format!(
-                    "━━━ Complete Security Audit Details ({} checks, {} issues detected) ━━━━━━━━━━",
-                    report.findings.len(),
-                    total_issues
-                )
-            } else {
-                format!(
-                    "━━━ Actionable Security Findings ({} issues detected) ━━━━━━━━━━━━━━━━━━━━",
-                    total_issues
-                )
-            };
-            println!("  {}", header_title.yellow().bold());
-
-            let show_all_info = args.all || args.verbose;
-
-            for (domain, findings) in domains_with_findings {
-                let relevant: Vec<_> = findings
-                    .iter()
-                    .filter(|f| args.all || f.status == Status::Fail || f.status == Status::Warn)
-                    .collect();
-
-                if relevant.is_empty() {
-                    continue;
-                }
-
-                println!("\n  {} {}", "▶".cyan().bold(), domain.bold().white());
-
-                for f in relevant {
-                    match &f.status {
-                        Status::Pass => {
-                            if args.all {
-                                println!();
-                                println!(
-                                    "    {}  {:<32} {}",
-                                    "✔ PASS".green().bold(),
-                                    f.check_id.white(),
-                                    f.title.dimmed()
-                                );
-                                println!(
-                                    "       {:<7} {}",
-                                    "Details:".dimmed(),
-                                    f.description.green()
-                                );
-                                if !f.items.is_empty() {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Items:".dimmed(),
-                                        f.items.join(", ").cyan()
-                                    );
-                                }
-                                if let Some(url) = f.doc_url {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Docs:".dimmed(),
-                                        url.underline().dimmed()
-                                    );
-                                }
-                            }
-                        }
-                        Status::Skipped { reason } => {
-                            if show_all_info {
-                                println!();
-                                println!(
-                                    "    {}  {:<32} {}",
-                                    "– SKIP".dimmed(),
-                                    f.check_id.dimmed(),
-                                    f.title.dimmed()
-                                );
-                                println!("       {:<7} {}", "Reason:".dimmed(), reason.dimmed());
-                                if let Some(url) = f.doc_url {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Docs:".dimmed(),
-                                        url.underline().dimmed()
-                                    );
-                                }
-                            }
-                        }
-                        Status::Warn => {
-                            let sev = match f.severity {
-                                Severity::Critical => "[CRIT]".red().bold(),
-                                Severity::High => "[HIGH]".bright_red().bold(),
-                                Severity::Medium => "[MED] ".yellow().bold(),
-                                Severity::Low => "[LOW] ".cyan(),
-                                Severity::Info => "[INFO]".dimmed(),
-                            };
-                            println!();
-                            if show_all_info {
-                                println!(
-                                    "    {} {} {:<32} {}",
-                                    "⚠ WARN".on_yellow().black().bold(),
-                                    sev,
-                                    f.check_id.bold().yellow(),
-                                    f.title.dimmed()
-                                );
-                            } else {
-                                println!(
-                                    "    {} {} {}",
-                                    "⚠ WARN".on_yellow().black().bold(),
-                                    sev,
-                                    f.check_id.bold().yellow()
-                                );
-                            }
-                            println!("       {:<7} {}", "Issue:".yellow(), f.description);
-                            if let Some(fix) = &f.nixos_fix {
-                                let formatted_fix = fix.trim().replace('\n', "\n               ");
-                                println!(
-                                    "       {:<7} {}",
-                                    "Fix:".bright_magenta().bold(),
-                                    formatted_fix.cyan()
-                                );
-                            }
-                            if show_all_info {
-                                if !f.items.is_empty() {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Items:".dimmed(),
-                                        f.items.join(", ").cyan()
-                                    );
-                                }
-                                if let Some(url) = f.doc_url {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Docs:".dimmed(),
-                                        url.underline().dimmed()
-                                    );
-                                }
-                            }
-                        }
-                        Status::Fail => {
-                            let sev = match f.severity {
-                                Severity::Critical => "[CRIT]".on_red().white().bold(),
-                                Severity::High => "[HIGH]".bright_red().bold(),
-                                Severity::Medium => "[MED] ".yellow().bold(),
-                                Severity::Low => "[LOW] ".cyan(),
-                                Severity::Info => "[INFO]".dimmed(),
-                            };
-                            println!();
-                            if show_all_info {
-                                println!(
-                                    "    {} {} {:<32} {}",
-                                    "✖ FAIL".on_red().white().bold(),
-                                    sev,
-                                    f.check_id.bold().red(),
-                                    f.title.dimmed()
-                                );
-                            } else {
-                                println!(
-                                    "    {} {} {}",
-                                    "✖ FAIL".on_red().white().bold(),
-                                    sev,
-                                    f.check_id.bold().red()
-                                );
-                            }
-                            println!("       {:<7} {}", "Issue:".red(), f.description);
-                            if let Some(fix) = &f.nixos_fix {
-                                let formatted_fix = fix.trim().replace('\n', "\n               ");
-                                println!(
-                                    "       {:<7} {}",
-                                    "Fix:".bright_magenta().bold(),
-                                    formatted_fix.cyan()
-                                );
-                            }
-                            if show_all_info {
-                                if !f.items.is_empty() {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Items:".dimmed(),
-                                        f.items.join(", ").yellow()
-                                    );
-                                }
-                                if let Some(url) = f.doc_url {
-                                    println!(
-                                        "       {:<7} {}",
-                                        "Docs:".dimmed(),
-                                        url.underline().dimmed()
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     // Severity vulnerability counts for dashboard
     let mut crit_count = 0;
@@ -458,19 +505,23 @@ async fn main() {
     let dur_ms = report.duration.as_millis();
     let duration_str = format!("{}ms", dur_ms).dimmed();
 
-    println!();
-    println!(
+    emit!(out);
+    emit!(
+        out,
         "  {}",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━ AUDIT DASHBOARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             .cyan()
             .bold()
     );
-    println!();
-    println!(
+    emit!(out);
+    emit!(
+        out,
         "   Security Score : {}  (Duration: {})",
-        score_status, duration_str
+        score_status,
+        duration_str
     );
-    println!(
+    emit!(
+        out,
         "   Probes         : {} total  ·  {} pass  ·  {} warn  ·  {} fail{}",
         report.findings.len().to_string().bold(),
         report.passed.to_string().green().bold(),
@@ -482,48 +533,54 @@ async fn main() {
             String::new()
         }
     );
-    println!();
-    println!("   Vulnerability Severity Breakdown:");
-    println!(
+    emit!(out);
+    emit!(out, "   Vulnerability Severity Breakdown:");
+    emit!(
+        out,
         "     Critical: {:<4}  High: {:<4}  Medium: {:<4}  Low: {}",
         crit_count.to_string().red().bold(),
         high_count.to_string().bright_red().bold(),
         med_count.to_string().yellow().bold(),
         low_count.to_string().cyan().bold()
     );
-    println!();
-    println!("   Recommended Actions:");
-    println!(
+    emit!(out);
+    emit!(out, "   Recommended Actions:");
+    emit!(
+        out,
         "   • Generate NixOS auto-fix : {}",
         "nix-sentinel -g /etc/nixos/hardening.nix".cyan()
     );
-    println!(
+    emit!(
+        out,
         "   • Export full JSON report : {}",
         "nix-sentinel -o report.json".cyan()
     );
     if !args.all {
-        println!(
+        emit!(
+            out,
             "   • View all passing checks : {}",
             "nix-sentinel --all".cyan()
         );
     }
-    println!();
-    println!(
+    emit!(out);
+    emit!(
+        out,
         "  {}",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             .cyan()
             .bold()
     );
-    println!();
+    emit!(out);
 
     // Export JSON report
-    if let Some(path) = args.output {
+    if let Some(path) = &args.output {
         match serde_json::to_string_pretty(&report.findings) {
             Ok(json) => {
-                if let Err(e) = fs::write(&path, json) {
-                    eprintln!("{}: {}", "Error writing JSON report".red(), e);
+                if let Err(e) = fs::write(path, json) {
+                    emit!(out, "{}: {}", "Error writing JSON report".red(), e);
                 } else {
-                    println!(
+                    emit!(
+                        out,
                         "{} Structured JSON audit report ({} findings) saved to {}",
                         "✔".green(),
                         report.findings.len().to_string().bold(),
@@ -531,12 +588,12 @@ async fn main() {
                     );
                 }
             }
-            Err(e) => eprintln!("{}: {}", "Failed to serialize report".red(), e),
+            Err(e) => emit!(out, "{}: {}", "Failed to serialize report".red(), e),
         }
     }
 
     // Generate declarative NixOS hardening configuration file
-    if let Some(path) = args.generate_fix {
+    if let Some(path) = &args.generate_fix {
         let (nix_module, sysctl_count, block_count) =
             NixFixGenerator::generate_nixos_module_with_stats(&report.findings);
         let total_fixes = sysctl_count + block_count;
@@ -549,42 +606,89 @@ async fn main() {
                     .cyan()
             );
             println!("{}", nix_module);
+            return;
         } else {
-            match fs::write(&path, &nix_module) {
+            match fs::write(path, &nix_module) {
                 Ok(_) => {
-                    println!("\n{}", "────────────────────────────────────────────────────────────────────────────────".dimmed());
-                    println!(
+                    emit!(out, "\n{}", "────────────────────────────────────────────────────────────────────────────────".dimmed());
+                    emit!(
+                        out,
                         "{} Declarative NixOS hardening module written to {}",
                         "✔".green().bold(),
                         path.bold().cyan()
                     );
-                    println!("   ├─ Generated Fixes     : {} total ({} sysctl knobs, {} system/daemon declarations)",
+                    emit!(out, "   ├─ Generated Fixes     : {} total ({} sysctl knobs, {} system/daemon declarations)",
                         total_fixes.to_string().bold().green(),
                         sysctl_count.to_string().cyan(),
                         block_count.to_string().cyan()
                     );
-                    println!("   ├─ Module Architecture : Ready-to-import NixOS module (imports = [ ./{path} ])");
-                    println!("   ├─ Contents            : Covers failed sysctl, disabled unneeded services, root protection, etc.");
-                    println!("   └─ How to apply in NixOS:");
-                    println!(
+                    emit!(out, "   ├─ Module Architecture : Ready-to-import NixOS module (imports = [ ./{path} ])");
+                    emit!(out, "   ├─ Contents            : Covers failed sysctl, disabled unneeded services, root protection, etc.");
+                    emit!(out, "   └─ How to apply in NixOS:");
+                    emit!(
+                        out,
                         "        1. Review the generated settings: cat {}",
                         path.cyan()
                     );
-                    println!(
+                    emit!(
+                        out,
                         "        2. Add to /etc/nixos/configuration.nix: imports = [ ./{path} ];"
                     );
-                    println!(
+                    emit!(
+                        out,
                         "        3. Test & apply system configuration: sudo nixos-rebuild switch\n"
                     );
                 }
                 Err(e) => {
-                    eprintln!(
+                    emit!(
+                        out,
                         "{}: {}",
                         "Error writing declarative NixOS hardening file".red(),
                         e
                     );
                 }
             }
+        }
+    }
+
+    // Display output (interactive pager if running in terminal, or direct stdout)
+    if !args.no_pager
+        && std::io::stdout().is_terminal()
+        && args.generate_fix.as_deref() != Some("-")
+    {
+        display_with_pager(&out);
+    } else {
+        print!("{}", out);
+    }
+}
+
+fn display_with_pager(content: &str) {
+    let pager = std::env::var("PAGER").unwrap_or_else(|_| "less".to_string());
+    let mut parts = pager.split_whitespace();
+    let cmd = parts.next().unwrap_or("less").to_string();
+    let mut args: Vec<String> = parts.map(|s| s.to_string()).collect();
+
+    // Default to less with -R for ANSI colors and alternate screen buffer
+    if (cmd == "less" || cmd.ends_with("/less"))
+        && !args.iter().any(|a| a.contains('R') || a.contains('r'))
+    {
+        args.push("-R".to_string());
+    }
+
+    match std::process::Command::new(&cmd)
+        .args(&args)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(mut child) => {
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write as IoWrite;
+                let _ = stdin.write_all(content.as_bytes());
+            }
+            let _ = child.wait();
+        }
+        Err(_) => {
+            print!("{}", content);
         }
     }
 }
