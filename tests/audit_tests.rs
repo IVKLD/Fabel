@@ -1,18 +1,18 @@
 #[cfg(test)]
 mod tests {
-    use nix_sentinel::checks::anti_forensics::AntiForensicsChecker;
-    use nix_sentinel::checks::boot_hardening::BootHardeningChecker;
-    use nix_sentinel::checks::core_dumps::CoreDumpsChecker;
-    use nix_sentinel::checks::data_leaks::DataLeaksChecker;
-    use nix_sentinel::checks::hardware_cpu::HardwareCpuChecker;
-    use nix_sentinel::checks::network_firewall::NetworkFirewallChecker;
-    use nix_sentinel::checks::peripheral::PeripheralChecker;
-    use nix_sentinel::checks::pki::PkiChecker;
-    use nix_sentinel::checks::ssh::SshChecker;
-    use nix_sentinel::checks::stealth::StealthChecker;
-    use nix_sentinel::engine::AuditEngine;
-    use nix_sentinel::fix_generator::NixFixGenerator;
-    use nix_sentinel::types::{Checker, Finding, Severity, Status};
+    use fabel::checks::anti_forensics::AntiForensicsChecker;
+    use fabel::checks::boot_hardening::BootHardeningChecker;
+    use fabel::checks::core_dumps::CoreDumpsChecker;
+    use fabel::checks::data_leaks::DataLeaksChecker;
+    use fabel::checks::hardware_cpu::HardwareCpuChecker;
+    use fabel::checks::network_firewall::NetworkFirewallChecker;
+    use fabel::checks::peripheral::PeripheralChecker;
+    use fabel::checks::pki::PkiChecker;
+    use fabel::checks::ssh::SshChecker;
+    use fabel::checks::stealth::StealthChecker;
+    use fabel::engine::AuditEngine;
+    use fabel::fix_generator::NixFixGenerator;
+    use fabel::types::{Checker, Finding, Severity, Status};
 
     #[tokio::test]
     async fn test_boot_hardening_runs() {
@@ -114,7 +114,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_internet_intercept_checker_runs() {
-        let checker = nix_sentinel::checks::internet_intercept::InternetInterceptChecker;
+        let checker = fabel::checks::internet_intercept::InternetInterceptChecker;
         let findings = checker.run().await;
         assert!(
             !findings.is_empty(),

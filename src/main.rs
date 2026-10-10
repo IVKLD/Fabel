@@ -24,11 +24,11 @@ macro_rules! emit {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "nix-sentinel",
+    name = "fabel",
     author = "Principal Security Architecture Team",
     version = "0.3.0",
     about = "Host-based Threat Detection & Deep Security Audit Engine for NixOS",
-    long_about = "nix-sentinel is a specialized Host Security & Integrity Audit Engine for NixOS.\nIt identifies configuration weaknesses, hidden interception channels, rootkits, and DPI interference,\nand can automatically generate ready-to-import declarative NixOS hardening configurations."
+    long_about = "fabel is a specialized Host Security & Integrity Audit Engine for NixOS.\nIt identifies configuration weaknesses, hidden interception channels, rootkits, and DPI interference,\nand can automatically generate ready-to-import declarative NixOS hardening configurations."
 )]
 struct Args {
     /// Save full audit report as structured JSON (e.g. -o report.json)
@@ -75,7 +75,7 @@ async fn main() {
         out,
         "  {}  {} {}",
         "🛡️".bold(),
-        "nix-sentinel".cyan().bold(),
+        "fabel".cyan().bold(),
         "v0.3.0".dimmed()
     );
     emit!(
@@ -548,18 +548,18 @@ async fn main() {
     emit!(
         out,
         "   • Generate NixOS auto-fix : {}",
-        "nix-sentinel -g /etc/nixos/hardening.nix".cyan()
+        "fabel -g /etc/nixos/hardening.nix".cyan()
     );
     emit!(
         out,
         "   • Export full JSON report : {}",
-        "nix-sentinel -o report.json".cyan()
+        "fabel -o report.json".cyan()
     );
     if !args.all {
         emit!(
             out,
             "   • View all passing checks : {}",
-            "nix-sentinel --all".cyan()
+            "fabel --all".cyan()
         );
     }
     emit!(out);

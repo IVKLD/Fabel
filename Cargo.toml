@@ -1,15 +1,19 @@
 [package]
-name = "nix-sentinel"
+name = "fabel"
 version = "0.3.0"
 edition = "2021"
 authors = ["Principal Security Architecture Team"]
 description = "Host-based Threat Detection, Counter-Surveillance & Hardening Engine for NixOS"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/nix-sentinel/nix-sentinel"
-homepage = "https://github.com/nix-sentinel/nix-sentinel"
+repository = "https://github.com/nix-sentinel/fable"
+homepage = "https://github.com/nix-sentinel/fable"
 keywords = ["nixos", "security", "audit", "hardening", "anti-surveillance"]
 categories = ["command-line-utilities", "security-tools"]
+
+[lib]
+name = "fabel"
+path = "src/lib.rs"
 
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }

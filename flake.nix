@@ -1,5 +1,5 @@
 {
-  description = "nix-sentinel: Host-based Security Audit & Hardening Engine for NixOS";
+  description = "fabel: Host-based Security Audit & Hardening Engine for NixOS";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -14,7 +14,7 @@
       {
         packages = {
           default = pkgs.rustPlatform.buildRustPackage {
-            pname = "nix-sentinel";
+            pname = "fabel";
             version = "0.3.0";
             src = ./.;
 
@@ -27,9 +27,9 @@
 
             meta = with pkgs.lib; {
               description = "Next-gen Host Security Audit & Hardening Engine for NixOS";
-              homepage = "https://github.com/nix-sentinel/nix-sentinel";
+              homepage = "https://github.com/nix-sentinel/fable";
               license = licenses.mit;
-              mainProgram = "nix-sentinel";
+              mainProgram = "fabel";
               platforms = platforms.linux;
             };
           };
@@ -52,11 +52,11 @@
       }) // {
         nixosModules.default = { config, lib, pkgs, ... }:
           let
-            cfg = config.services.nix-sentinel;
+            cfg = config.services.fabel;
           in
           {
-            options.services.nix-sentinel = {
-              enable = lib.mkEnableOption "nix-sentinel automated security audit daemon";
+            options.services.fabel = {
+              enable = lib.mkEnableOption "fabel automated security audit daemon";
               schedule = lib.mkOption {
                 type = lib.types.str;
                 default = "daily";
@@ -64,12 +64,12 @@
               };
               reportPath = lib.mkOption {
                 type = lib.types.path;
-                default = "/var/log/nix-sentinel-report.json";
+                default = "/var/log/fabel-report.json";
                 description = "Location for structured JSON reports";
               };
               autoGenerateFixPath = lib.mkOption {
                 type = lib.types.nullOr lib.types.path;
-                default = "/etc/nixos/sentinel-hardening.nix";
+                default = "/etc/nixos/fabel-hardening.nix";
                 description = "Path where declarative hardening configuration will be written";
               };
               minScoreAlertThreshold = lib.mkOption {
@@ -80,12 +80,12 @@
             };
 
             config = lib.mkIf cfg.enable {
-              systemd.services.nix-sentinel = {
-                description = "nix-sentinel Host Security Audit";
+              systemd.services.fabel = {
+                description = "fabel Host Security Audit";
                 serviceConfig = {
                   Type = "oneshot";
                   ExecStart = ''
-                    ${self.packages.${pkgs.system}.default}/bin/nix-sentinel \
+                    ${self.packages.${pkgs.system}.default}/bin/fabel \
                       --output ${cfg.reportPath} \
                       ${lib.optionalString (cfg.autoGenerateFixPath != null) "--generate-fix ${cfg.autoGenerateFixPath}"}
                   '';
@@ -98,8 +98,8 @@
                 };
               };
 
-              systemd.timers.nix-sentinel = {
-                description = "Run nix-sentinel security audit periodically";
+              systemd.timers.fabel = {
+                description = "Run fabel security audit periodically";
                 wantedBy = [ "timers.target" ];
                 timerConfig = {
                   OnCalendar = cfg.schedule;

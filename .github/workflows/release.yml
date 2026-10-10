@@ -28,17 +28,17 @@ jobs:
       - name: Package Binary
         run: |
           mkdir -p release-artifacts
-          cp result/bin/nix-sentinel release-artifacts/nix-sentinel-x86_64-linux
-          chmod +x release-artifacts/nix-sentinel-x86_64-linux
+          cp result/bin/fabel release-artifacts/fabel-x86_64-linux
+          chmod +x release-artifacts/fabel-x86_64-linux
           cd release-artifacts
-          tar -czvf nix-sentinel-x86_64-linux.tar.gz nix-sentinel-x86_64-linux
-          sha256sum nix-sentinel-x86_64-linux.tar.gz > SHA256SUMS.txt
+          tar -czvf fabel-x86_64-linux.tar.gz fabel-x86_64-linux
+          sha256sum fabel-x86_64-linux.tar.gz > SHA256SUMS.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-artifacts/nix-sentinel-x86_64-linux.tar.gz
+            release-artifacts/fabel-x86_64-linux.tar.gz
             release-artifacts/SHA256SUMS.txt
           generate_release_notes: true
           draft: false

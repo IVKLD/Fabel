@@ -1,7 +1,7 @@
-# 🛡️ nix-sentinel
+# 🛡️ fabel
 
-[![CI](https://github.com/nix-sentinel/nix-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/nix-sentinel/nix-sentinel/actions/workflows/ci.yml)
-[![Release](https://github.com/nix-sentinel/nix-sentinel/actions/workflows/release.yml/badge.svg)](https://github.com/nix-sentinel/nix-sentinel/actions/workflows/release.yml)
+[![CI](https://github.com/fabel/fabel/actions/workflows/ci.yml/badge.svg)](https://github.com/fabel/fabel/actions/workflows/ci.yml)
+[![Release](https://github.com/fabel/fabel/actions/workflows/release.yml/badge.svg)](https://github.com/fabel/fabel/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![NixOS Flake](https://img.shields.io/badge/NixOS-Flake%20Ready-5277C3?logo=nixos&logoColor=white)](https://nixos.org)
 [![Checks](https://img.shields.io/badge/Security%20Checks-78%20Active-brightgreen.svg)](#-audit-domains--checks)
@@ -17,15 +17,15 @@ Run instantly without installing anything using Nix Flakes:
 
 ```bash
 # Run full system security audit
-nix run github:nix-sentinel/nix-sentinel
+nix run github:fabel/fabel
 
 # Audit existing NixOS configuration and generate an instant hardening module
-sudo nix run github:nix-sentinel/nix-sentinel -- -f /etc/nixos/configuration.nix -g /etc/nixos/sentinel-hardened.nix
+sudo nix run github:fabel/fabel -- -f /etc/nixos/configuration.nix -g /etc/nixos/sentinel-hardened.nix
 ```
 
 Or install in your temporary shell:
 ```bash
-nix-shell -p nix-sentinel
+nix-shell -p fabel
 ```
 
 ---
@@ -40,13 +40,13 @@ nix-shell -p nix-sentinel
 - **Network Anonymity & Anti-DPI:** Analyzes DNS-over-HTTPS/TLS leaks, TCP timestamp fingerprinting, IPv6 SLAAC address tracking, ICMP redirects, and Tor/WireGuard/SOCKS kill-switch readiness.
 - **Internet Security & E2E Anti-Interception:** Detects plaintext DNS leaks, TLS verification bypass flags (`GIT_SSL_NO_VERIFY`, `NODE_TLS_REJECT_UNAUTHORIZED`), local ARP cache poisoning MITM, and unencrypted cleartext sockets (HTTP, FTP, Telnet).
 - **Untrusted / State PKI Certificate Scanner:** Inspects system and user trust stores for untrusted Russian state root CAs (*Russian Trusted Root CA*, *Ministry of Digital Development*), enterprise proxy intercepts, and rogue certificate authorities.
-- **NixOS Native Flake & Systemd Service:** Deploy as a scheduled background daemon (`services.nix-sentinel`) with automatic alerting if your host security score drops.
+- **NixOS Native Flake & Systemd Service:** Deploy as a scheduled background daemon (`services.fabel`) with automatic alerting if your host security score drops.
 
 ---
 
 ## 📊 Audit Domains & Checks
 
-`nix-sentinel` runs **78 automated checks** organized into 15 defensive domains:
+`fabel` runs **78 automated checks** organized into 15 defensive domains:
 
 | Domain | Description | Key Checks |
 |---|---|---|
@@ -73,22 +73,22 @@ nix-shell -p nix-sentinel
 
 ```bash
 # Display human-friendly colored terminal report
-nix-sentinel
+fabel
 
 # Audit a specific NixOS configuration file
-nix-sentinel --file /etc/nixos/configuration.nix
+fabel --file /etc/nixos/configuration.nix
 
 # Export machine-readable structured JSON report
-nix-sentinel --output /tmp/sentinel-report.json
+fabel --output /tmp/sentinel-report.json
 
 # Generate declarative NixOS hardening module from findings
-nix-sentinel --generate-fix /etc/nixos/sentinel-hardening.nix
+fabel --generate-fix /etc/nixos/sentinel-hardening.nix
 ```
 
 ### CLI Options
 
 ```text
-Usage: nix-sentinel [OPTIONS]
+Usage: fabel [OPTIONS]
 
 Options:
   -f, --file <FILE>
@@ -107,7 +107,7 @@ Options:
 
 ## 🛡️ Applying the Generated Hardening Module
 
-When you run `nix-sentinel --generate-fix /etc/nixos/sentinel-hardening.nix`, it synthesizes a ready-to-import NixOS module.
+When you run `fabel --generate-fix /etc/nixos/sentinel-hardening.nix`, it synthesizes a ready-to-import NixOS module.
 
 Simply import it into your `/etc/nixos/configuration.nix` or Flake:
 
@@ -134,30 +134,30 @@ sudo nixos-rebuild switch
 
 ## ⚙️ NixOS Module Integration
 
-`nix-sentinel` includes a first-class NixOS module for periodic background audits via systemd timers.
+`fabel` includes a first-class NixOS module for periodic background audits via systemd timers.
 
 ### Flake Configuration Example
 
-Add `nix-sentinel` to your flake inputs:
+Add `fabel` to your flake inputs:
 
 ```nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nix-sentinel.url = "github:nix-sentinel/nix-sentinel";
+    fabel.url = "github:fabel/fabel";
   };
 
-  outputs = { self, nixpkgs, nix-sentinel, ... }: {
+  outputs = { self, nixpkgs, fabel, ... }: {
     nixosConfigurations.my-hardened-host = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
         ./configuration.nix
-        nix-sentinel.nixosModules.default
+        fabel.nixosModules.default
         {
-          services.nix-sentinel = {
+          services.fabel = {
             enable = true;
             schedule = "daily";  # systemd OnCalendar format
-            reportPath = "/var/log/nix-sentinel-report.json";
+            reportPath = "/var/log/fabel-report.json";
             autoGenerateFixPath = "/etc/nixos/sentinel-hardening.nix";
             minScoreAlertThreshold = 85.0; # alert if score drops below 85%
           };
@@ -172,7 +172,7 @@ Add `nix-sentinel` to your flake inputs:
 
 ## 🔒 Security Philosophy & Threat Model
 
-`nix-sentinel` is designed around a zero-trust threat model targeting:
+`fabel` is designed around a zero-trust threat model targeting:
 
 1. **State-Level Passive & Active Adversaries:** Deep Packet Inspection (DPI) fingerprinting, forced TLS interception via state-issued root CAs, and network telemetry correlation.
 2. **Physical Seizure & Cold Boot Forensics:** Extracting LUKS encryption keys from unpowered RAM chips, exploiting unencrypted `/boot` ESP partitions via Evil Maid firmware rootkits, or direct memory theft over PCIe/Thunderbolt DMA channels.
