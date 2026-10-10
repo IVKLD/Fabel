@@ -1,6 +1,11 @@
-# fabel
+# 🛡️ Fabel
 
-Утилита аудита безопасности и харденинга хоста для NixOS и Linux.
+[![CI](https://github.com/IVKLD/Fabel/actions/workflows/ci.yml/badge.svg)](https://github.com/IVKLD/Fabel/actions/workflows/ci.yml)
+[![Release](https://github.com/IVKLD/Fabel/actions/workflows/release.yml/badge.svg)](https://github.com/IVKLD/Fabel/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![NixOS Flake](https://img.shields.io/badge/NixOS-Flake%20Ready-5277C3?logo=nixos&logoColor=white)](https://nixos.org)
+
+**Fabel** — утилита аудита безопасности и харденинга хоста для NixOS и Linux.
 
 Проверяет 86 параметров системы по 16 категориям (ядро, сеть, утечки данных, права доступа, целостность) и автоматически генерирует готовый файл конфигурации `hardening.nix`, устраняющий найденные уязвимости.
 
@@ -10,7 +15,12 @@
 
 ### Без установки (Nix Flakes)
 ```bash
-nix run github:nix-sentinel/fable
+nix run github:IVKLD/Fabel
+```
+
+Или запуск во временном окружении:
+```bash
+nix shell github:IVKLD/Fabel -c fabel
 ```
 
 ### Сборка из исходников
@@ -35,13 +45,19 @@ fabel --all
 ```
 Показывает все 86 проверок (включая пройденные `PASS`), прямые ссылки на документацию ядра/RFC и списки параметров.
 
-### 3. Только сводная таблица (в один экран)
+### 3. Только ошибки и предупреждения
+```bash
+fabel -f
+```
+Показывает только проверки со статусами `FAIL` и `WARN`.
+
+### 4. Только сводная таблица (в один экран)
 ```bash
 fabel -t
 ```
 Выводит только таблицу статусов и баллов по 16 доменам без детализации отдельных проверок.
 
-### 4. Генерация готового фикса для NixOS
+### 5. Генерация готового фикса для NixOS
 ```bash
 # Записать готовый модуль в файл
 fabel -g /etc/nixos/hardening.nix
@@ -50,12 +66,12 @@ fabel -g /etc/nixos/hardening.nix
 fabel -g -
 ```
 
-### 5. Экспорт в JSON
+### 6. Экспорт в JSON
 ```bash
 fabel -o report.json
 ```
 
-### 6. Вывод напрямую в stdout (без пейджера)
+### 7. Вывод напрямую в stdout (без пейджера)
 ```bash
 fabel --no-pager
 ```
@@ -86,7 +102,7 @@ fabel --no-pager
 
 ---
 
-## Что проверяет fabel (86 проверок / 16 доменов)
+## Что проверяет Fabel (86 проверок / 16 доменов)
 
 | Домен | Что проверяется |
 |---|---|
@@ -111,13 +127,13 @@ fabel --no-pager
 
 ## Автоматический аудит по расписанию (NixOS Flake)
 
-Для регулярного фонового аудита добавьте модуль `fabel` в конфигурацию системы:
+Для регулярного фонового аудита добавьте модуль `Fabel` в конфигурацию системы:
 
 ```nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fabel.url = "github:nix-sentinel/fable";
+    fabel.url = "github:IVKLD/Fabel";
   };
 
   outputs = { self, nixpkgs, fabel, ... }: {
@@ -164,4 +180,4 @@ fabel --no-pager
 
 ## Лицензия
 
-MIT License.
+[MIT](LICENSE) © 2026 [IVKLD](https://github.com/IVKLD)
