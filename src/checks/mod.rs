@@ -5,6 +5,7 @@ pub mod core_dumps;
 pub mod data_leaks;
 pub mod hardware_cpu;
 pub mod integrity;
+pub mod internet_intercept;
 pub mod network_dpi;
 pub mod network_firewall;
 pub mod nixos;

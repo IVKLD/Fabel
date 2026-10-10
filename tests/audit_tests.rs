@@ -113,6 +113,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_internet_intercept_checker_runs() {
+        let checker = nix_sentinel::checks::internet_intercept::InternetInterceptChecker;
+        let findings = checker.run().await;
+        assert!(
+            !findings.is_empty(),
+            "InternetInterceptChecker should return findings"
+        );
+        for f in &findings {
+            assert!(!f.check_id.is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn test_audit_engine_scoring_with_warns() {
         let mut engine = AuditEngine::new();
         engine.register(StealthChecker);

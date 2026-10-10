@@ -4,7 +4,7 @@
 [![Release](https://github.com/nix-sentinel/nix-sentinel/actions/workflows/release.yml/badge.svg)](https://github.com/nix-sentinel/nix-sentinel/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![NixOS Flake](https://img.shields.io/badge/NixOS-Flake%20Ready-5277C3?logo=nixos&logoColor=white)](https://nixos.org)
-[![Checks](https://img.shields.io/badge/Security%20Checks-69%20Active-brightgreen.svg)](#-audit-domains--checks)
+[![Checks](https://img.shields.io/badge/Security%20Checks-78%20Active-brightgreen.svg)](#-audit-domains--checks)
 
 > **Next-generation Host-based Security Audit & Declarative Hardening Engine for NixOS and Linux.**  
 > Designed to detect state-actor level surveillance vectors, physical seizure extraction, memory forensics, kernel exploitation, side-channels, and data leaks — with **instant zero-friction generation of declarative NixOS hardening modules**.
@@ -32,12 +32,13 @@ nix-shell -p nix-sentinel
 
 ## 🚀 Key Features
 
-- **69 Rigorous Security Checks across 13 Specialized Domains:** Covers physical security, kernel defenses, network fingerprinting, cryptographic trust, anti-forensics, and data leakage.
+- **78 Rigorous Security Checks across 15 Specialized Domains:** Covers physical security, kernel defenses, network fingerprinting, cryptographic trust, anti-forensics, and data leakage.
 - **Declarative NixOS Generator (`--generate-fix`):** Synthesizes syntactically valid NixOS modules that resolve detected vulnerabilities with a single import. Unifies `boot.kernelParams`, `boot.blacklistedKernelModules`, and `boot.kernel.sysctl` without collisions.
 - **Cold Boot & Memory Forensics Defense:** Checks for DRAM reset attack mitigations (`init_on_alloc`, `init_on_free`, `mem_sleep_default=deep`), swap encryption, and RAM zeroing on shutdown.
 - **Anti-Forensics & Activity Scrubbing:** Identifies shell history leakage, swap unencrypted persistence, core dump persistence, systemd crash retention, and ephemeral rootfs setups.
 - **Physical & Hardware Protection:** Detects unencrypted `/boot` and ESP Evil Maid attack vectors, DMA attacks via Thunderbolt/PCIe (`iommu=force`), Intel ME / AMD PSP state, and untrusted peripheral auto-authorization (USBGuard).
 - **Network Anonymity & Anti-DPI:** Analyzes DNS-over-HTTPS/TLS leaks, TCP timestamp fingerprinting, IPv6 SLAAC address tracking, ICMP redirects, and Tor/WireGuard/SOCKS kill-switch readiness.
+- **Internet Security & E2E Anti-Interception:** Detects plaintext DNS leaks, TLS verification bypass flags (`GIT_SSL_NO_VERIFY`, `NODE_TLS_REJECT_UNAUTHORIZED`), local ARP cache poisoning MITM, and unencrypted cleartext sockets (HTTP, FTP, Telnet).
 - **Untrusted / State PKI Certificate Scanner:** Inspects system and user trust stores for untrusted Russian state root CAs (*Russian Trusted Root CA*, *Ministry of Digital Development*), enterprise proxy intercepts, and rogue certificate authorities.
 - **NixOS Native Flake & Systemd Service:** Deploy as a scheduled background daemon (`services.nix-sentinel`) with automatic alerting if your host security score drops.
 
@@ -45,10 +46,11 @@ nix-shell -p nix-sentinel
 
 ## 📊 Audit Domains & Checks
 
-`nix-sentinel` runs **69 automated checks** organized into 13 defensive domains:
+`nix-sentinel` runs **78 automated checks** organized into 15 defensive domains:
 
 | Domain | Description | Key Checks |
 |---|---|---|
+| **Internet Security & E2E Trust** | End-to-end encryption and traffic interception protection | Plaintext DNS leakage, TLS verification bypass flags, local ARP spoofing MITM, unencrypted sockets, VPN kill-switch |
 | **Memory Hardening** | RAM sanitization, cold boot, and heap mitigations | Slab zeroing, page allocation wipe, swap encryption, KASLR, W^X pages, swap file security |
 | **Boot Hardening** | Bootloader, EFI, and firmware attack surface | Unencrypted `/boot` (Evil Maid), SecureBoot status, TPM2 PCR enrollment, GRUB password, kernel signature verification |
 | **Anti-Forensics** | Traceless execution and persistent residue elimination | Shell history persistence, core dumps to disk, systemd journal wipe on reboot, bash timestamping, auditd logging |

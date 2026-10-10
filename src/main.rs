@@ -75,6 +75,7 @@ async fn main() {
         engine,
         checks::pki::PkiChecker,
         checks::network_dpi::NetworkDpiChecker,
+        checks::internet_intercept::InternetInterceptChecker,
         checks::network_firewall::NetworkFirewallChecker,
         checks::data_leaks::DataLeaksChecker,
         checks::anti_forensics::AntiForensicsChecker,
